@@ -18,6 +18,11 @@ extension DriverModel {
             if announce, !text.isEmpty {
                 self.append(text)
             }
+            if self.deviceStatusKind == .ready {
+                self.startLiveMonitoring()
+            } else {
+                self.stopLiveMonitoring(rgbStatus: "Current RGB unavailable")
+            }
         }
     }
 
@@ -32,7 +37,7 @@ extension DriverModel {
         if text.contains("USB device: OK") && text.contains("macOS HID open permission: FAIL") {
             deviceStatusKind = .permissionNeeded
             deviceStatusTitle = "Permission needed"
-            deviceStatusDetail = "The GMK67 is connected, but macOS is blocking HID access. Use Permission to request access for the bundled helper, then quit/reopen and reconnect the keyboard."
+            deviceStatusDetail = "The GMK67 is connected, but macOS is blocking HID access. Enable GMK67 in Input Monitoring, then quit/reopen and reconnect the keyboard."
             return
         }
 
@@ -69,5 +74,24 @@ extension DriverModel {
         } else {
             append("Could not open System Settings. Open Privacy & Security > Input Monitoring manually.")
         }
+    }
+
+    func copyAppExecutablePath() {
+        guard let appExecutablePath else {
+            append("Could not find the GMK67 app executable path.")
+            return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(appExecutablePath, forType: .string)
+        append("Copied app executable path for Input Monitoring: \(appExecutablePath)")
+    }
+
+    func revealAppInFinder() {
+        guard let appExecutablePath else {
+            append("Could not find the GMK67 app executable path.")
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: appExecutablePath)])
+        append("Revealed app executable: \(appExecutablePath)")
     }
 }

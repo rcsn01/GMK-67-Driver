@@ -18,6 +18,7 @@ mkdir -p "$MACOS" "$HELPER" "$RESOURCES/Resources/vendor"
 
 cp "$ROOT/.build/debug/GMK67App" "$MACOS/GMK67"
 cp "$ROOT/.build/debug/gmk67" "$HELPER/gmk67"
+cp "$ROOT/.build/debug/gmk67" "$MACOS/GMK67Helper"
 cp "$ROOT/Resources/vendor/KeyboardLayout.xml" "$RESOURCES/Resources/vendor/KeyboardLayout.xml"
 cp "$ROOT/Resources/vendor/device.xml" "$RESOURCES/Resources/vendor/device.xml"
 
@@ -54,7 +55,7 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-chmod +x "$MACOS/GMK67" "$HELPER/gmk67"
+chmod +x "$MACOS/GMK67" "$MACOS/GMK67Helper" "$HELPER/gmk67"
 
 if command -v codesign >/dev/null 2>&1; then
   codesign --force --deep --sign - "$APP" >/dev/null

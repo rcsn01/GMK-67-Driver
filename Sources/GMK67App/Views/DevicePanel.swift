@@ -6,7 +6,7 @@ struct DevicePanel: View {
     var body: some View {
         Panel("Device") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                     CommandButton("Refresh", systemImage: "arrow.clockwise") {
                         model.refreshDeviceStatus()
                     }
@@ -19,12 +19,21 @@ struct DevicePanel: View {
                     CommandButton("Permission", systemImage: "lock.shield") {
                         model.requestInputMonitoringPermission()
                     }
+                    CommandButton("Permission Status", systemImage: "lock.doc") {
+                        model.run(["permission-status"], title: "macOS Input Monitoring permission")
+                    }
                     CommandButton("Settings", systemImage: "gearshape") {
                         model.openInputMonitoringSettings()
                     }
+                    CommandButton("Copy App", systemImage: "doc.on.doc") {
+                        model.copyAppExecutablePath()
+                    }
+                    CommandButton("Reveal App", systemImage: "magnifyingglass") {
+                        model.revealAppInFinder()
+                    }
                 }
 
-                HStack {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                     CommandButton("Doctor", systemImage: "stethoscope") {
                         model.run(["doctor"], title: "Read-only diagnostics")
                     }

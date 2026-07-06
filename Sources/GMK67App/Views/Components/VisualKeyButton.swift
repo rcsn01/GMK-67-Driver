@@ -3,6 +3,7 @@ import SwiftUI
 struct VisualKeyButton: View {
     let key: VisualKey
     let isSelected: Bool
+    let isPressed: Bool
     let colorHex: String?
     let remap: VisualRemap?
     let action: () -> Void
@@ -14,7 +15,15 @@ struct VisualKeyButton: View {
                     .fill(keyFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
+                            .fill(isPressed ? Color.green.opacity(0.20) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
                             .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isSelected ? 2 : 1)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isPressed ? Color.green : Color.clear, lineWidth: 3)
                     )
                 Text(key.label)
                     .font(.system(size: key.width > 70 ? 10 : 11, weight: .medium))
@@ -46,13 +55,17 @@ struct VisualKeyButton: View {
     }
 
     private var keyFill: Color {
-        isSelected ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor)
+        if let colorHex {
+            return colorFromHex(colorHex).opacity(isSelected ? 0.46 : 0.30)
+        }
+        return isSelected ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor)
     }
 
     private var helpText: String {
+        let prefix = isPressed ? "Pressed: " : ""
         if let remap {
-            return "\(key.label) (\(key.spec)) -> \(remap.target)\(remap.modifier.map { " + \($0)" } ?? "")"
+            return "\(prefix)\(key.label) (\(key.spec)) -> \(remap.target)\(remap.modifier.map { " + \($0)" } ?? "")"
         }
-        return key.label == key.spec ? key.spec : "\(key.label) (\(key.spec))"
+        return prefix + (key.label == key.spec ? key.spec : "\(key.label) (\(key.spec))")
     }
 }

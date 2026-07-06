@@ -47,7 +47,7 @@ struct QuickPresetsPanel: View {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                     ForEach(colorPresets) { item in
                         Button {
-                            model.runLiveHID(["rgb-preset-apply", item.preset], title: "Apply \(item.label) preset")
+                            model.applyRGBPreset(named: item.preset, title: "Apply \(item.label) preset")
                         } label: {
                             HStack(spacing: 6) {
                                 HStack(spacing: 2) {

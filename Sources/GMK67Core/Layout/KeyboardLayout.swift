@@ -6,26 +6,40 @@ import IOKit.hid
 func loadKeyboardLayout() throws -> [KeyItem] {
     var candidates: [URL] = []
 
-    if let resourceDirectory = ProcessInfo.processInfo.environment["GMK67_RESOURCES_DIR"], !resourceDirectory.isEmpty {
-        candidates.append(
-            URL(fileURLWithPath: resourceDirectory)
-                .appendingPathComponent("Resources/vendor/KeyboardLayout.xml")
-        )
-        candidates.append(
-            URL(fileURLWithPath: resourceDirectory)
-                .appendingPathComponent("vendor/KeyboardLayout.xml")
-        )
+    func appendResourceCandidates(from baseURL: URL) {
+        candidates.append(baseURL.appendingPathComponent("Resources/vendor/KeyboardLayout.xml"))
+        candidates.append(baseURL.appendingPathComponent("vendor/KeyboardLayout.xml"))
     }
 
-    candidates.append(contentsOf: [
-        URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Resources/vendor/KeyboardLayout.xml"),
-        URL(fileURLWithPath: #filePath)
+    if let resourceDirectory = ProcessInfo.processInfo.environment["GMK67_RESOURCES_DIR"], !resourceDirectory.isEmpty {
+        appendResourceCandidates(from: URL(fileURLWithPath: resourceDirectory))
+    }
+
+    if let resourceURL = Bundle.main.resourceURL {
+        appendResourceCandidates(from: resourceURL)
+    }
+
+    if let executableDirectory = Bundle.main.executableURL?.deletingLastPathComponent() {
+        var directory = executableDirectory
+        for _ in 0..<6 {
+            appendResourceCandidates(from: directory)
+            directory.deleteLastPathComponent()
+        }
+    }
+
+    var currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    for _ in 0..<6 {
+        appendResourceCandidates(from: currentDirectory)
+        currentDirectory.deleteLastPathComponent()
+    }
+
+    appendResourceCandidates(
+        from: URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Resources/vendor/KeyboardLayout.xml")
-    ])
+            .deletingLastPathComponent()
+    )
 
     guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
         throw DriverError.layoutNotFound
@@ -129,6 +143,9 @@ func keyboardUsageNamesByCode() throws -> [UInt8: String] {
     for key in try loadKeyboardLayout() where key.code >= 0 && key.code <= 0xFF {
         names[UInt8(key.code)] = key.name
     }
+    for (usage, name) in preferredHIDUsageNames {
+        names[usage] = name
+    }
     for (name, usage) in hidUsageAliases where names[usage] == nil {
         names[usage] = name
     }
@@ -138,24 +155,34 @@ func keyboardUsageNamesByCode() throws -> [UInt8: String] {
     return names
 }
 
-func decodeBootKeyboardReport(_ bytes: [UInt8], usageNames: [UInt8: String]) -> String? {
-    guard bytes.count >= 8 else { return nil }
-    let modifierByte = bytes[0]
+func pressedKeyNamesFromBootKeyboardReport(_ bytes: [UInt8], usageNames: [UInt8: String]) -> Set<String>? {
+    let report = bytes.count >= 9 && bytes[0] == 0 ? Array(bytes.dropFirst()) : bytes
+    guard report.count >= 8 else { return nil }
+
+    let modifierByte = report[0]
     let modifiers = bootModifierNames.compactMap { modifierByte & $0.mask == 0 ? nil : $0.name }
-    let usages = bytes[2..<min(bytes.count, 8)].filter { $0 != 0 }
-
-    if modifiers.isEmpty && usages.isEmpty {
-        return "release"
-    }
-
+    let usages = report[2..<min(report.count, 8)].filter { $0 != 0 && $0 != 1 }
     let keyNames = usages.map { usage -> String in
         usageNames[usage] ?? String(format: "0x%02X", usage)
     }
 
+    return Set(modifiers + keyNames)
+}
+
+func decodeBootKeyboardReport(_ bytes: [UInt8], usageNames: [UInt8: String]) -> String? {
+    guard let pressedKeys = pressedKeyNamesFromBootKeyboardReport(bytes, usageNames: usageNames) else { return nil }
+    if pressedKeys.isEmpty {
+        return "release"
+    }
+
     var parts: [String] = []
+    let modifiers = bootModifierNames.map(\.name).filter { pressedKeys.contains($0) }
     if !modifiers.isEmpty {
         parts.append("mods=\(modifiers.joined(separator: "+"))")
     }
+    let keyNames = pressedKeys
+        .filter { !modifiers.contains($0) }
+        .sorted()
     if !keyNames.isEmpty {
         parts.append("keys=\(keyNames.joined(separator: "+"))")
     }

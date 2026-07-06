@@ -212,6 +212,195 @@ final class InputReportContext {
     }
 }
 
+public final class GMK67KeyInputMonitor {
+    public typealias PressedKeysHandler = (Set<String>) -> Void
+
+    private let manager: IOHIDManager
+    private let onPressedKeysChanged: PressedKeysHandler
+    private let stateLock = NSLock()
+    private var device: IOHIDDevice?
+    private var reportBuffer: UnsafeMutablePointer<UInt8>?
+    private var reportBufferLength = 0
+    private var context: KeyInputMonitorContext?
+    private var usageNames: [UInt8: String] = [:]
+    private var pressedKeys: Set<String> = []
+    private var scheduledRunLoop: CFRunLoop?
+    private var isStarted = false
+
+    public init(onPressedKeysChanged: @escaping PressedKeysHandler) {
+        self.manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        self.onPressedKeysChanged = onPressedKeysChanged
+    }
+
+    deinit {
+        stop()
+    }
+
+    public var currentPressedKeys: Set<String> {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return pressedKeys
+    }
+
+    public func start() throws {
+        guard !isStarted else { return }
+
+        usageNames = try keyboardUsageNamesByCode()
+        let matching: [String: Any] = [
+            kIOHIDVendorIDKey: GMK67.vendorID,
+            kIOHIDProductIDKey: GMK67.productID
+        ]
+        IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
+        let managerOpenResult = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard managerOpenResult == kIOReturnSuccess else {
+            throw DriverError.openFailed(managerOpenResult)
+        }
+
+        guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice>, !set.isEmpty else {
+            throw DriverError.noDevice
+        }
+
+        let infos = set.map { device in
+            HIDDeviceInfo(
+                device: device,
+                vendorID: intProperty(device, kIOHIDVendorIDKey),
+                productID: intProperty(device, kIOHIDProductIDKey),
+                usagePage: intProperty(device, kIOHIDDeviceUsagePageKey),
+                usage: intProperty(device, kIOHIDDeviceUsageKey),
+                primaryUsagePage: intProperty(device, kIOHIDPrimaryUsagePageKey),
+                primaryUsage: intProperty(device, kIOHIDPrimaryUsageKey),
+                usagePairs: usagePairsProperty(device),
+                product: stringProperty(device, kIOHIDProductKey),
+                manufacturer: stringProperty(device, kIOHIDManufacturerKey),
+                serial: stringProperty(device, kIOHIDSerialNumberKey),
+                maxFeatureReportSize: intProperty(device, kIOHIDMaxFeatureReportSizeKey),
+                maxInputReportSize: intProperty(device, kIOHIDMaxInputReportSizeKey),
+                maxOutputReportSize: intProperty(device, kIOHIDMaxOutputReportSizeKey)
+            )
+        }
+
+        guard let info = Self.inputDeviceCandidate(from: infos) else {
+            throw DriverError.noDevice
+        }
+
+        let openResult = IOHIDDeviceOpen(info.device, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard openResult == kIOReturnSuccess else {
+            throw DriverError.openFailed(openResult)
+        }
+        guard let runLoop = CFRunLoopGetMain() else {
+            IOHIDDeviceClose(info.device, IOOptionBits(kIOHIDOptionsTypeNone))
+            throw DriverError.invalidArgument("Could not access the main run loop for keyboard input monitoring.")
+        }
+
+        let length = max(info.maxInputReportSize, 8)
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: length)
+        buffer.initialize(repeating: 0, count: length)
+
+        let context = KeyInputMonitorContext(monitor: self)
+        let contextPointer = Unmanaged.passUnretained(context).toOpaque()
+        IOHIDDeviceRegisterInputReportCallback(
+            info.device,
+            buffer,
+            length,
+            { context, result, _, _, _, report, reportLength in
+                guard let context else {
+                    return
+                }
+                let state = Unmanaged<KeyInputMonitorContext>.fromOpaque(context).takeUnretainedValue()
+                let bytes = Array(UnsafeBufferPointer(start: report, count: reportLength))
+                state.monitor?.handleInputReport(result: result, bytes: bytes)
+            },
+            contextPointer
+        )
+
+        IOHIDDeviceScheduleWithRunLoop(info.device, runLoop, CFRunLoopMode.defaultMode.rawValue)
+
+        self.device = info.device
+        self.reportBuffer = buffer
+        self.reportBufferLength = length
+        self.context = context
+        self.scheduledRunLoop = runLoop
+        self.isStarted = true
+    }
+
+    public func stop() {
+        guard isStarted else { return }
+
+        if let device, let runLoop = scheduledRunLoop {
+            IOHIDDeviceUnscheduleFromRunLoop(device, runLoop, CFRunLoopMode.defaultMode.rawValue)
+        }
+        if let device, let reportBuffer {
+            IOHIDDeviceRegisterInputReportCallback(device, reportBuffer, reportBufferLength, nil, nil)
+            IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+        }
+        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+
+        if let reportBuffer {
+            reportBuffer.deinitialize(count: reportBufferLength)
+            reportBuffer.deallocate()
+        }
+
+        device = nil
+        reportBuffer = nil
+        reportBufferLength = 0
+        context = nil
+        scheduledRunLoop = nil
+        isStarted = false
+        updatePressedKeys([])
+    }
+
+    private func handleInputReport(result: IOReturn, bytes: [UInt8]) {
+        guard result == kIOReturnSuccess else { return }
+        guard let pressed = pressedKeyNamesFromBootKeyboardReport(bytes, usageNames: usageNames) else { return }
+        updatePressedKeys(pressed)
+    }
+
+    private func updatePressedKeys(_ newPressedKeys: Set<String>) {
+        stateLock.lock()
+        let didChange = newPressedKeys != pressedKeys
+        pressedKeys = newPressedKeys
+        stateLock.unlock()
+
+        if didChange {
+            onPressedKeysChanged(newPressedKeys)
+        }
+    }
+
+    private static func inputDeviceCandidate(from infos: [HIDDeviceInfo]) -> HIDDeviceInfo? {
+        let sorted = infos.sorted { lhs, rhs in
+            if lhs.isBootKeyboardInputInterface != rhs.isBootKeyboardInputInterface {
+                return lhs.isBootKeyboardInputInterface
+            }
+            if lhs.isLikelyConfigurationInterface != rhs.isLikelyConfigurationInterface {
+                return !lhs.isLikelyConfigurationInterface
+            }
+            if lhs.maxInputReportSize != rhs.maxInputReportSize {
+                return lhs.maxInputReportSize < rhs.maxInputReportSize
+            }
+            return lhs.primaryUsage < rhs.primaryUsage
+        }
+        return sorted.first { $0.maxInputReportSize >= 8 }
+    }
+}
+
+private final class KeyInputMonitorContext {
+    weak var monitor: GMK67KeyInputMonitor?
+
+    init(monitor: GMK67KeyInputMonitor) {
+        self.monitor = monitor
+    }
+}
+
+private extension HIDDeviceInfo {
+    var isBootKeyboardInputInterface: Bool {
+        maxInputReportSize >= 8 && (
+            (primaryUsagePage == 0x0001 && primaryUsage == 0x0006) ||
+            (usagePage == 0x0001 && usage == 0x0006) ||
+            usagePairs.contains { $0.page == 0x0001 && $0.usage == 0x0006 }
+        )
+    }
+}
+
 func intProperty(_ device: IOHIDDevice, _ key: String) -> Int {
     guard let value = IOHIDDeviceGetProperty(device, key as CFString) else { return 0 }
     if CFGetTypeID(value) == CFNumberGetTypeID() {

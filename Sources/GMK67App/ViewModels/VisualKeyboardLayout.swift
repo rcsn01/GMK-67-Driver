@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct VisualKey: Identifiable {
@@ -39,3 +40,137 @@ let visualKeyboardRows: [VisualKeyRow] = [
         vk("left", "left"), vk("down", "down"), vk("right", "right")
     ])
 ]
+
+private let visualKeySpecsByToken: [String: String] = {
+    var specs: [String: String] = [:]
+    for row in visualKeyboardRows {
+        for key in row.keys {
+            specs[specKeyToken(key.spec)] = key.spec
+        }
+    }
+    return specs
+}()
+
+private let visualKeyLabelsByToken: [String: String] = {
+    var labels: [String: String] = [:]
+    for row in visualKeyboardRows {
+        for key in row.keys {
+            labels[specKeyToken(key.spec)] = key.label
+        }
+    }
+    return labels
+}()
+
+private let visualKeyOrderByToken: [String: Int] = {
+    var order: [String: Int] = [:]
+    var index = 0
+    for row in visualKeyboardRows {
+        for key in row.keys {
+            order[specKeyToken(key.spec)] = index
+            index += 1
+        }
+    }
+    return order
+}()
+
+private let inputNameToVisualKeySpec: [String: String] = {
+    let pairs = [
+        ("escape", "esc"),
+        ("esc", "esc"),
+        ("caps", "Caps"),
+        ("capslock", "Caps"),
+        ("delete", "del"),
+        ("del", "del"),
+        ("pageup", "pageup"),
+        ("page up", "pageup"),
+        ("pagedown", "pagedown"),
+        ("page down", "pagedown"),
+        ("arrowup", "up"),
+        ("up", "up"),
+        ("arrowdown", "down"),
+        ("down", "down"),
+        ("arrowleft", "left"),
+        ("left", "left"),
+        ("arrowright", "right"),
+        ("right", "right"),
+        ("equal", "equal"),
+        ("equals", "equal"),
+        ("=", "equal"),
+        ("minus", "-"),
+        ("dash", "-"),
+        ("-", "-"),
+        ("leftbracket", "["),
+        ("lbracket", "["),
+        ("[", "["),
+        ("rightbracket", "]"),
+        ("rbracket", "]"),
+        ("]", "]"),
+        ("backslash", "\\|"),
+        ("pipe", "\\|"),
+        ("\\|", "\\|"),
+        ("semicolon", ";"),
+        (";", ";"),
+        ("quote", "quote"),
+        ("apostrophe", "quote"),
+        ("'\"", "quote"),
+        ("comma", "comma"),
+        ("<", "comma"),
+        ("period", "period"),
+        ("dot", "period"),
+        (">", "period"),
+        ("slash", "slash"),
+        ("?", "slash"),
+        ("left-control", "control"),
+        ("left-ctrl", "control"),
+        ("control", "control"),
+        ("ctrl", "control"),
+        ("left-shift", "0x49"),
+        ("right-shift", "0x54"),
+        ("left-alt", "0x5D"),
+        ("right-alt", "0x5F"),
+        ("left-option", "0x5D"),
+        ("right-option", "0x5F"),
+        ("left-command", "win"),
+        ("left-cmd", "win"),
+        ("command", "win"),
+        ("cmd", "win")
+    ]
+    return Dictionary(uniqueKeysWithValues: pairs.map { (specKeyToken($0.0), $0.1) })
+}()
+
+func visualKeySpec(forInputName name: String) -> String? {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    let token = specKeyToken(trimmed)
+    if let mapped = inputNameToVisualKeySpec[token] {
+        return mapped
+    }
+    if let exact = visualKeySpecsByToken[token] {
+        return exact
+    }
+    if trimmed.count == 1, let scalar = trimmed.unicodeScalars.first, CharacterSet.letters.contains(scalar) {
+        return trimmed.uppercased()
+    }
+    return nil
+}
+
+func visualKeyIsPressed(_ spec: String, in pressedKeys: Set<String>) -> Bool {
+    let token = specKeyToken(spec)
+    return pressedKeys.contains { specKeyToken($0) == token }
+}
+
+func visualKeyStatusText(for pressedKeys: Set<String>) -> String {
+    guard !pressedKeys.isEmpty else { return "No keys pressed" }
+    let labels = pressedKeys
+        .sorted { lhs, rhs in
+            let lhsOrder = visualKeyOrderByToken[specKeyToken(lhs)] ?? Int.max
+            let rhsOrder = visualKeyOrderByToken[specKeyToken(rhs)] ?? Int.max
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+        .map { visualKeyLabelsByToken[specKeyToken($0)] ?? $0 }
+    return "Pressed: \(labels.joined(separator: " + "))"
+}

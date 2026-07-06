@@ -196,13 +196,23 @@ struct AppLibraryBundle: Codable {
     let macros: [MacroLibraryBundleEntry]
 }
 
-struct RGBRecordJSON: Codable {
-    let chunk: Int
-    let offset: Int
-    let index: Int
-    let key: String?
-    let rgb: String
+public struct RGBRecord: Codable, Sendable {
+    public let chunk: Int
+    public let offset: Int
+    public let index: Int
+    public let key: String?
+    public let rgb: String
+
+    public init(chunk: Int, offset: Int, index: Int, key: String?, rgb: String) {
+        self.chunk = chunk
+        self.offset = offset
+        self.index = index
+        self.key = key
+        self.rgb = rgb
+    }
 }
+
+typealias RGBRecordJSON = RGBRecord
 
 struct KeymapRecordJSON: Codable {
     let offset: Int

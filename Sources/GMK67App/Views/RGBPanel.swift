@@ -10,8 +10,8 @@ struct RGBPanel: View {
 
     var body: some View {
         Panel("RGB") {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                GridRow {
+            VStack(alignment: .leading, spacing: 10) {
+                ControlGrid {
                     Text("Preset")
                     Picker("", selection: $model.rgbPresetName) {
                         ForEach(presets, id: \.self) { preset in
@@ -31,7 +31,7 @@ struct RGBPanel: View {
                     }
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("Key")
                     TextField("W", text: $model.keyName)
                         .textFieldStyle(.roundedBorder)
@@ -50,11 +50,11 @@ struct RGBPanel: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 120)
                     CommandButton("Set Key", systemImage: "paintbrush") {
-                        model.runLiveHID(["rgb-set-key", model.keyName, model.colorHex], title: "Set one key")
+                        model.setRGBKey()
                     }
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("All Keys")
                     ColorPicker("", selection: Binding(
                         get: { model.allKeysColor },
@@ -69,25 +69,24 @@ struct RGBPanel: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 120)
                     CommandButton("Set All", systemImage: "paintpalette") {
-                        model.runLiveHID(["rgb-set-all", model.fillHex], title: "Set all physical keys")
+                        model.setAllRGBKeys()
                     }
                     CommandButton("Clear", systemImage: "lightswitch.off") {
-                        model.runLiveHID(["rgb-clear"], title: "Clear physical key RGB")
+                        model.clearRGB()
                     }
-                    EmptyView()
                 }
 
-                GridRow {
+                ControlGrid(minimumWidth: 180) {
                     Text("Map")
                     TextField("W=FF0000 A=00FF00", text: $model.mapSpecs)
                         .textFieldStyle(.roundedBorder)
-                        .gridCellColumns(3)
+                        .frame(minWidth: 260)
                     CommandButton("Apply Map", systemImage: "rectangle.3.group") {
-                        model.runLiveHID(["rgb-map"] + splitCommandLine(model.mapSpecs), title: "Set multiple RGB keys")
+                        model.applyRGBMap()
                     }
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("Profile Fill")
                     ColorPicker("", selection: Binding(
                         get: { model.profileFillColor },
@@ -104,10 +103,9 @@ struct RGBPanel: View {
                     CommandButton("Create", systemImage: "doc.badge.plus") {
                         model.createRGBProfile()
                     }
-                    EmptyView()
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("Profiles")
                     CommandButton("Save", systemImage: "square.and.arrow.down") {
                         model.saveRGBProfile()
@@ -118,10 +116,9 @@ struct RGBPanel: View {
                     CommandButton("Restore", systemImage: "square.and.arrow.up") {
                         model.restoreRGBProfile()
                     }
-                    EmptyView()
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("Editor")
                     CommandButton("Load File", systemImage: "square.and.arrow.down.on.square") {
                         model.loadRGBProfileIntoEditor()
@@ -129,11 +126,9 @@ struct RGBPanel: View {
                     CommandButton("Load Current", systemImage: "keyboard.badge.ellipsis") {
                         model.loadCurrentRGBIntoEditor()
                     }
-                    EmptyView()
-                    EmptyView()
                 }
 
-                GridRow {
+                ControlGrid {
                     Text("Backups")
                     CommandButton("List", systemImage: "clock.arrow.circlepath") {
                         model.listRGBBackups()
@@ -141,8 +136,6 @@ struct RGBPanel: View {
                     CommandButton("Restore Latest", systemImage: "arrow.uturn.backward") {
                         model.restoreLatestRGBBackup()
                     }
-                    EmptyView()
-                    EmptyView()
                 }
             }
         }

@@ -1568,6 +1568,7 @@ func readinessReport(openCheck: Bool) -> String {
 
     var hardFailures: [String] = []
     var warnings: [String] = []
+    let inputMonitoringGranted = CGPreflightListenEventAccess()
 
     do {
         let keys = try loadKeyboardLayout()
@@ -1628,6 +1629,7 @@ func readinessReport(openCheck: Bool) -> String {
         }
 
         if openCheck {
+            add("Input Monitoring preflight: \(inputMonitoringGranted ? "GRANTED" : "NOT GRANTED")")
             if let index = likelyIndices.first {
                 do {
                     _ = try driver.device(at: index, configurationOnly: false)
@@ -1636,7 +1638,13 @@ func readinessReport(openCheck: Bool) -> String {
                 } catch {
                     add("macOS HID open permission: FAIL")
                     add("  \(error)")
-                    warnings.append("macOS may need Input Monitoring permission for the terminal/app")
+                    if inputMonitoringGranted {
+                        add("  Input Monitoring preflight is granted, but IOHID still refused the open.")
+                        add("  Quit/reopen the app or launcher, reconnect the keyboard, and grant the parent app/terminal if macOS lists it separately.")
+                        warnings.append("Input Monitoring preflight is granted but IOHID open is still denied")
+                    } else {
+                        warnings.append("macOS may need Input Monitoring permission for the terminal/app")
+                    }
                 }
             } else {
                 add("macOS HID open permission: SKIPPED")
@@ -1822,6 +1830,7 @@ func diagnosticsReport() -> String {
     add("GMK67 diagnostics report")
     add("Generated: \(ISO8601DateFormatter().string(from: Date()))")
     add(String(format: "Target VID:PID: %04X:%04X", GMK67.vendorID, GMK67.productID))
+    add("Input Monitoring preflight: \(CGPreflightListenEventAccess() ? "GRANTED" : "NOT GRANTED")")
     add("")
 
     do {

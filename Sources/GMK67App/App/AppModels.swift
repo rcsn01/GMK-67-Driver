@@ -1,4 +1,5 @@
 import Foundation
+import GMK67Core
 
 struct AppProfileLibraryEntry: Codable, Identifiable {
     let slot: String
@@ -81,13 +82,7 @@ struct AppMacroEvent: Codable {
     let delayMS: Int?
 }
 
-struct AppRGBRecord: Codable {
-    let chunk: Int
-    let offset: Int
-    let index: Int
-    let key: String?
-    let rgb: String
-}
+typealias AppRGBRecord = RGBRecord
 
 struct AppKeymapRecord: Codable {
     let offset: Int

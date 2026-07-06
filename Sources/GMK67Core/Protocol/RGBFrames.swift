@@ -167,6 +167,23 @@ func readRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, readDevice: IOHI
     return frames
 }
 
+public func readCurrentRGBRecords(writeIndex: Int = 0, readIndex: Int = 0, chunks: Int = 9) throws -> [RGBRecord] {
+    guard chunks > 0, chunks <= 9 else {
+        throw DriverError.invalidArgument("RGB readback chunks must be between 1 and 9.")
+    }
+
+    let driver = HIDDriver()
+    let devices = driver.devices()
+    guard devices.indices.contains(writeIndex), devices.indices.contains(readIndex) else {
+        throw DriverError.noDevice
+    }
+
+    let writeDevice = try driver.device(at: writeIndex, configurationOnly: false)
+    let readDevice = try driver.device(at: readIndex, configurationOnly: false)
+    let frames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice, chunks: chunks)
+    return rgbRecordJSON(frames, keyByLightIndex: keyMapByLightIndex())
+}
+
 func writeRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
     guard frames.count >= 8, frames.prefix(8).allSatisfy({ $0.count == 64 }) else {
         throw DriverError.invalidArgument("RGB restore requires at least eight 64-byte frames.")

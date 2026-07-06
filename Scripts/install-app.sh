@@ -49,6 +49,12 @@ rm -rf "$DEST"
 ditto "$APP" "$DEST"
 
 echo "Installed $DEST"
+echo "Input Monitoring app executable:"
+echo "  $DEST/Contents/MacOS/GMK67"
+echo
+echo "The app now runs driver commands in-process. Use Device > Permission Status"
+echo "inside GMK67.app to check the exact app process that opens HID."
+
 if [[ "$OPEN_APP" -eq 1 ]]; then
   open "$DEST"
 fi

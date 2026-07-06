@@ -7,7 +7,7 @@ struct KeymapPanel: View {
     var body: some View {
         Panel("Keymap") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                ControlGrid {
                     Text("Preset")
                     Picker("", selection: $model.keymapPresetName) {
                         ForEach(presets, id: \.self) { preset in
@@ -27,7 +27,7 @@ struct KeymapPanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Source")
                     TextField("A", text: $model.sourceKey)
                         .textFieldStyle(.roundedBorder)
@@ -49,7 +49,7 @@ struct KeymapPanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid(minimumWidth: 160) {
                     Text("Profile")
                     TextField("W=up A=left S=down D=right", text: $model.keymapSpecs)
                         .textFieldStyle(.roundedBorder)
@@ -70,7 +70,7 @@ struct KeymapPanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Library")
                     TextField("WASD Arrows", text: $model.keymapProfileName)
                         .textFieldStyle(.roundedBorder)
@@ -100,7 +100,7 @@ struct KeymapPanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Saved")
                     CommandButton("Load", systemImage: "square.and.arrow.down.on.square") {
                         model.loadKeymapLibraryEntry()
@@ -125,7 +125,7 @@ struct KeymapPanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Alt Table")
                     CommandButton("Export", systemImage: "doc.badge.plus") {
                         model.exportAlternateTableProfile()

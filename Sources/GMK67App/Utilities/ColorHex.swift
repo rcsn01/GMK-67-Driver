@@ -26,10 +26,17 @@ func colorFromHex(_ hex: String) -> Color {
     return Color(red: red, green: green, blue: blue)
 }
 
+func normalizedRGBHex(_ hex: String) -> String? {
+    let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+    guard trimmed.count == 6, Int(trimmed, radix: 16) != nil else {
+        return nil
+    }
+    return trimmed.uppercased()
+}
+
 func colorForKey(_ key: String, in specs: String) -> String? {
     valueForSpecKey(key, in: specs).flatMap { value in
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
-        return trimmed.count == 6 && Int(trimmed, radix: 16) != nil ? trimmed.uppercased() : nil
+        normalizedRGBHex(value)
     }
 }
 
@@ -38,8 +45,7 @@ func visualColorForKey(_ key: String, in specs: String, fillHex: String) -> Stri
         return explicit
     }
 
-    let fill = fillHex.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "").uppercased()
-    guard fill.count == 6, Int(fill, radix: 16) != nil, fill != "000000" else {
+    guard let fill = normalizedRGBHex(fillHex), fill != "000000" else {
         return nil
     }
     return fill

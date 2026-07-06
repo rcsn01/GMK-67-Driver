@@ -22,6 +22,9 @@ struct DeviceStatusBanner: View {
                 CommandButton("Permission", systemImage: "lock.shield") {
                     model.requestInputMonitoringPermission()
                 }
+                CommandButton("Copy App", systemImage: "doc.on.doc") {
+                    model.copyAppExecutablePath()
+                }
                 CommandButton("Settings", systemImage: "gearshape") {
                     model.openInputMonitoringSettings()
                 }

@@ -5,8 +5,19 @@ struct VisualKeyboardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Keyboard")
-                .font(.title3.weight(.semibold))
+            HStack(spacing: 10) {
+                Text("Keyboard")
+                    .font(.title3.weight(.semibold))
+                Text(model.currentRGBStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(model.lastKeyStatus)
+                    .font(.caption)
+                    .foregroundStyle(model.pressedVisualKeys.isEmpty ? .secondary : .primary)
+                    .lineLimit(1)
+                Spacer()
+            }
 
             ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -16,7 +27,8 @@ struct VisualKeyboardView: View {
                                 VisualKeyButton(
                                     key: key,
                                     isSelected: model.selectedVisualKey.caseInsensitiveCompare(key.spec) == .orderedSame,
-                                    colorHex: visualColorForKey(key.spec, in: model.mapSpecs, fillHex: model.profileFillHex),
+                                    isPressed: model.isVisualKeyPressed(key.spec),
+                                    colorHex: model.visualColorHex(for: key.spec),
                                     remap: remapForKey(key.spec, in: model.keymapSpecs)
                                 ) {
                                     model.selectVisualKey(key.spec)

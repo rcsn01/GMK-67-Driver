@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import Foundation
+import GMK67Core
+import Darwin
 
 @MainActor
 final class DriverModel: ObservableObject {
@@ -47,38 +49,23 @@ final class DriverModel: ObservableObject {
     @Published var macroLibrarySlot = "combo"
     @Published var advancedCommand = "doctor"
     @Published var selectedVisualKey = "W"
+    @Published var currentRGBSpecs = ""
+    @Published var currentRGBReadbackLoaded = false
+    @Published var currentRGBStatus = "Waiting for hardware RGB readback"
+    @Published var pressedVisualKeys: Set<String> = []
+    @Published var lastKeyStatus = "No keys pressed"
     @Published var profileLibraryEntries: [AppProfileLibraryEntry] = []
     @Published var keymapLibraryEntries: [AppKeymapLibraryEntry] = []
     @Published var macroLibraryEntries: [AppMacroLibraryEntry] = []
     var didAutoRefreshDeviceStatus = false
+    private var rgbPollTask: Task<Void, Never>?
+    private var keyInputMonitor: GMK67KeyInputMonitor?
+    private var isLiveRGBReadInFlight = false
+    private var pendingRGBRefresh = false
+    private var liveMonitoringGeneration = 0
 
-    private var helperURL: URL? {
-        if let resourceURL = Bundle.main.resourceURL {
-            let bundled = resourceURL.appendingPathComponent("Helper/gmk67")
-            if FileManager.default.isExecutableFile(atPath: bundled.path) {
-                return bundled
-            }
-        }
-
-        let executableDirectory = Bundle.main.executableURL?.deletingLastPathComponent()
-        let sibling = executableDirectory?.appendingPathComponent("gmk67")
-        if let sibling, FileManager.default.isExecutableFile(atPath: sibling.path) {
-            return sibling
-        }
-
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let debug = cwd.appendingPathComponent(".build/debug/gmk67")
-        if FileManager.default.isExecutableFile(atPath: debug.path) {
-            return debug
-        }
-
-        return nil
-    }
-
-    private var bundledResourcesDirectory: URL? {
-        guard let resourceURL = Bundle.main.resourceURL else { return nil }
-        let vendorLayout = resourceURL.appendingPathComponent("Resources/vendor/KeyboardLayout.xml")
-        return FileManager.default.fileExists(atPath: vendorLayout.path) ? resourceURL : nil
+    var appExecutablePath: String? {
+        Bundle.main.executableURL?.path
     }
 
     private var helperWorkingDirectory: URL {
@@ -110,12 +97,11 @@ final class DriverModel: ObservableObject {
 
     func run(_ arguments: [String], title: String? = nil) {
         guard !isRunning else { return }
-        guard let helperURL else {
-            append("Could not find bundled gmk67 helper. Build with Scripts/build-app.sh or run swift build first.")
+        if deferUntilLiveRGBReadFinishes({ self.run(arguments, title: title) }) {
             return
         }
 
-        let commandLine = ([helperURL.lastPathComponent] + arguments).joined(separator: " ")
+        let commandLine = (["gmk67"] + arguments).joined(separator: " ")
         append("\n$ \(commandLine)")
         if let title {
             append("# \(title)")
@@ -123,56 +109,29 @@ final class DriverModel: ObservableObject {
 
         isRunning = true
         let workingDirectory = helperWorkingDirectory
-        let resourcesDirectory = bundledResourcesDirectory
 
         Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = helperURL
-            process.arguments = arguments
-            process.currentDirectoryURL = workingDirectory
-            if let resourcesDirectory {
-                var environment = ProcessInfo.processInfo.environment
-                environment["GMK67_RESOURCES_DIR"] = resourcesDirectory.path
-                process.environment = environment
-            }
+            let result = runDriverCommandInProcess(arguments, workingDirectory: workingDirectory)
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
-
-            do {
-                try process.run()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                let text = String(data: data, encoding: .utf8) ?? ""
-                let status = process.terminationStatus
-
-                await MainActor.run {
-                    if !text.isEmpty {
-                        self.append(text)
-                    }
-                    if status != 0 {
-                        self.append("Command exited with status \(status).")
-                    }
-                    self.isRunning = false
+            await MainActor.run {
+                if !result.output.isEmpty {
+                    self.append(result.output)
                 }
-            } catch {
-                await MainActor.run {
-                    self.append("Could not run helper: \(error.localizedDescription)")
-                    self.isRunning = false
+                if result.status != 0 {
+                    self.append("Command exited with status \(result.status).")
                 }
+                self.isRunning = false
             }
         }
     }
 
     func runCapture(_ arguments: [String], title: String? = nil, completion: @escaping (String, Int32) -> Void) {
         guard !isRunning else { return }
-        guard let helperURL else {
-            append("Could not find bundled gmk67 helper. Build with Scripts/build-app.sh or run swift build first.")
+        if deferUntilLiveRGBReadFinishes({ self.runCapture(arguments, title: title, completion: completion) }) {
             return
         }
 
-        let commandLine = ([helperURL.lastPathComponent] + arguments).joined(separator: " ")
+        let commandLine = (["gmk67"] + arguments).joined(separator: " ")
         append("\n$ \(commandLine)")
         if let title {
             append("# \(title)")
@@ -180,51 +139,19 @@ final class DriverModel: ObservableObject {
 
         isRunning = true
         let workingDirectory = helperWorkingDirectory
-        let resourcesDirectory = bundledResourcesDirectory
 
         Task.detached(priority: .userInitiated) {
-            let process = Process()
-            process.executableURL = helperURL
-            process.arguments = arguments
-            process.currentDirectoryURL = workingDirectory
-            if let resourcesDirectory {
-                var environment = ProcessInfo.processInfo.environment
-                environment["GMK67_RESOURCES_DIR"] = resourcesDirectory.path
-                process.environment = environment
-            }
+            let result = runDriverCommandInProcess(arguments, workingDirectory: workingDirectory)
 
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-
-            do {
-                try process.run()
-                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                let outputText = String(data: outputData, encoding: .utf8) ?? ""
-                let errorText = String(data: errorData, encoding: .utf8) ?? ""
-                let status = process.terminationStatus
-
-                await MainActor.run {
-                    if !errorText.isEmpty {
-                        self.append(errorText)
+            await MainActor.run {
+                if result.status != 0 {
+                    if !result.output.isEmpty {
+                        self.append(result.output)
                     }
-                    if status != 0 {
-                        if !outputText.isEmpty {
-                            self.append(outputText)
-                        }
-                        self.append("Command exited with status \(status).")
-                    }
-                    self.isRunning = false
-                    completion(outputText, status)
+                    self.append("Command exited with status \(result.status).")
                 }
-            } catch {
-                await MainActor.run {
-                    self.append("Could not run helper: \(error.localizedDescription)")
-                    self.isRunning = false
-                }
+                self.isRunning = false
+                completion(result.output, result.status)
             }
         }
     }
@@ -248,4 +175,235 @@ final class DriverModel: ObservableObject {
         }
         run(arguments, title: title)
     }
+
+    func runLiveHIDCapture(_ arguments: [String], title: String? = nil, onSuccess: @escaping () -> Void) {
+        guard deviceStatusKind == .ready else {
+            append("Live keyboard access is not ready. Refresh device status, grant Input Monitoring if requested, quit/reopen the app, and reconnect the keyboard before running this command.")
+            if deviceStatusKind == .permissionNeeded {
+                append("Current blocker: macOS Input Monitoring permission is not granted.")
+            }
+            return
+        }
+        runCapture(arguments, title: title) { text, status in
+            guard status == 0 else { return }
+            if !text.isEmpty {
+                self.append(text)
+            }
+            onSuccess()
+        }
+    }
+
+    func visualColorHex(for key: String) -> String? {
+        guard currentRGBReadbackLoaded else { return nil }
+        return colorForKey(key, in: currentRGBSpecs)
+    }
+
+    func isVisualKeyPressed(_ key: String) -> Bool {
+        visualKeyIsPressed(key, in: pressedVisualKeys)
+    }
+
+    private func deferUntilLiveRGBReadFinishes(_ action: @escaping @MainActor () -> Void) -> Bool {
+        guard isLiveRGBReadInFlight else { return false }
+
+        Task { @MainActor in
+            for _ in 0..<40 {
+                if !self.isLiveRGBReadInFlight {
+                    action()
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            self.append("Live RGB readback is still active. Try the command again in a moment.")
+        }
+        return true
+    }
+}
+
+extension DriverModel {
+    func startLiveMonitoring() {
+        guard deviceStatusKind == .ready else {
+            stopLiveMonitoring(rgbStatus: "Current RGB unavailable")
+            return
+        }
+
+        let wasStopped = rgbPollTask == nil && keyInputMonitor == nil
+        if wasStopped {
+            liveMonitoringGeneration += 1
+            clearCurrentRGBReadback(status: "Waiting for hardware RGB readback")
+        }
+
+        startKeyInputMonitoring()
+        startRGBPollingIfNeeded()
+        requestCurrentRGBRefresh()
+    }
+
+    func stopLiveMonitoring(rgbStatus: String = "Current RGB unavailable") {
+        liveMonitoringGeneration += 1
+        rgbPollTask?.cancel()
+        rgbPollTask = nil
+        keyInputMonitor?.stop()
+        keyInputMonitor = nil
+        isLiveRGBReadInFlight = false
+        pendingRGBRefresh = false
+        clearCurrentRGBReadback(status: rgbStatus)
+        pressedVisualKeys = []
+        lastKeyStatus = "No keys pressed"
+    }
+
+    func clearCurrentRGBReadback(status: String) {
+        currentRGBSpecs = ""
+        currentRGBReadbackLoaded = false
+        currentRGBStatus = status
+    }
+
+    func requestCurrentRGBRefresh(announce: Bool = false) {
+        Task { @MainActor in
+            await refreshCurrentRGBPreview(announce: announce, force: true)
+        }
+    }
+
+    func readCurrentRGBRecordsForApp() async throws -> [RGBRecord] {
+        try await Task.detached(priority: .utility) {
+            try readCurrentRGBRecords(writeIndex: 0, readIndex: 0, chunks: 9)
+        }.value
+    }
+
+    func readCurrentRGBRecordsForUserAction() async throws -> [RGBRecord] {
+        while isLiveRGBReadInFlight {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        isLiveRGBReadInFlight = true
+        defer { isLiveRGBReadInFlight = false }
+        return try await readCurrentRGBRecordsForApp()
+    }
+
+    private func startRGBPollingIfNeeded() {
+        guard rgbPollTask == nil else { return }
+
+        rgbPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refreshCurrentRGBPreview(announce: false, force: false)
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    private func startKeyInputMonitoring() {
+        guard keyInputMonitor == nil else { return }
+
+        let monitor = GMK67KeyInputMonitor { [weak self] pressedKeys in
+            Task { @MainActor in
+                self?.updatePressedVisualKeys(fromInputNames: pressedKeys)
+            }
+        }
+
+        do {
+            try monitor.start()
+            keyInputMonitor = monitor
+            pressedVisualKeys = []
+            lastKeyStatus = "No keys pressed"
+        } catch {
+            keyInputMonitor = nil
+            pressedVisualKeys = []
+            lastKeyStatus = "Key monitor unavailable"
+            append("Key monitor unavailable: \(error)")
+        }
+    }
+
+    private func refreshCurrentRGBPreview(announce: Bool, force: Bool) async {
+        guard deviceStatusKind == .ready else {
+            if deviceStatusKind != .checking {
+                clearCurrentRGBReadback(status: "Current RGB unavailable")
+            }
+            return
+        }
+        guard !isRunning else { return }
+        guard !isLiveRGBReadInFlight else {
+            pendingRGBRefresh = pendingRGBRefresh || force
+            return
+        }
+
+        let generation = liveMonitoringGeneration
+        isLiveRGBReadInFlight = true
+        if !currentRGBReadbackLoaded {
+            currentRGBStatus = "Reading current RGB..."
+        }
+
+        do {
+            let records = try await readCurrentRGBRecordsForApp()
+            isLiveRGBReadInFlight = false
+            guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }
+            loadRGBRecordsIntoCurrentPreview(records, announce: announce)
+        } catch {
+            isLiveRGBReadInFlight = false
+            guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }
+            clearCurrentRGBReadback(status: "Current RGB read failed")
+            if announce {
+                append("Current RGB read failed: \(error)")
+            }
+        }
+
+        if pendingRGBRefresh {
+            pendingRGBRefresh = false
+            await refreshCurrentRGBPreview(announce: false, force: true)
+        }
+    }
+
+    private func updatePressedVisualKeys(fromInputNames inputNames: Set<String>) {
+        let visualKeys = Set(inputNames.compactMap { visualKeySpec(forInputName: $0) })
+        pressedVisualKeys = visualKeys
+        lastKeyStatus = visualKeyStatusText(for: visualKeys)
+    }
+}
+
+private func runDriverCommandInProcess(_ arguments: [String], workingDirectory: URL) -> (output: String, status: Int32) {
+    let originalDirectory = FileManager.default.currentDirectoryPath
+    let outputURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("gmk67-app-output-\(UUID().uuidString).log")
+
+    FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+    guard let outputHandle = try? FileHandle(forWritingTo: outputURL) else {
+        return ("Could not create command output capture file: \(outputURL.path)\n", 1)
+    }
+
+    fflush(nil)
+    let originalStdout = dup(STDOUT_FILENO)
+    let originalStderr = dup(STDERR_FILENO)
+    guard originalStdout >= 0, originalStderr >= 0 else {
+        outputHandle.closeFile()
+        try? FileManager.default.removeItem(at: outputURL)
+        return ("Could not capture command output: failed to duplicate stdout/stderr.\n", 1)
+    }
+    dup2(outputHandle.fileDescriptor, STDOUT_FILENO)
+    dup2(outputHandle.fileDescriptor, STDERR_FILENO)
+
+    var status: Int32 = 0
+    let didChangeDirectory = FileManager.default.changeCurrentDirectoryPath(workingDirectory.path)
+
+    do {
+        try runGMK67Command(["gmk67"] + arguments)
+    } catch {
+        fputs("error: \(error)\n", stderr)
+        status = 1
+    }
+
+    fflush(nil)
+    outputHandle.synchronizeFile()
+    dup2(originalStdout, STDOUT_FILENO)
+    dup2(originalStderr, STDERR_FILENO)
+    close(originalStdout)
+    close(originalStderr)
+    outputHandle.closeFile()
+    if didChangeDirectory {
+        FileManager.default.changeCurrentDirectoryPath(originalDirectory)
+    }
+
+    let data = (try? Data(contentsOf: outputURL)) ?? Data()
+    try? FileManager.default.removeItem(at: outputURL)
+    return (String(data: data, encoding: .utf8) ?? "", status)
 }

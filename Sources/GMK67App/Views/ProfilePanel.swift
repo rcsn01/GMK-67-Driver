@@ -7,7 +7,7 @@ struct ProfilePanel: View {
     var body: some View {
         Panel("Keyboard Profile") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                ControlGrid {
                     Text("Preset")
                     Picker("", selection: $model.profilePresetName) {
                         ForEach(presets, id: \.self) { preset in
@@ -27,7 +27,7 @@ struct ProfilePanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Name")
                     TextField("Gaming", text: $model.combinedProfileName)
                         .textFieldStyle(.roundedBorder)
@@ -75,7 +75,7 @@ struct ProfilePanel: View {
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Library")
                     Picker("", selection: $model.profileLibrarySlot) {
                         if model.profileLibraryEntries.isEmpty {

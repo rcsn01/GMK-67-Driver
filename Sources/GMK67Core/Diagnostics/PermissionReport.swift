@@ -31,6 +31,10 @@ func inputMonitoringPermissionReport(request: Bool) -> String {
     add("  2. Enable the executable shown above, GMK67.app, or the terminal/Cursor/Codex host app, depending on what macOS lists.")
     add("  3. Quit and reopen the app or terminal, then unplug/replug the keyboard.")
     add("")
+    add("For the app, grant the installed app executable when possible:")
+    add("  ~/Applications/GMK67.app/Contents/MacOS/GMK67")
+    add("Launching from dist/GMK67.app or rebuilding the app can require a separate Input Monitoring grant.")
+    add("")
     add("Settings URL:")
     add("  x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
 

@@ -84,15 +84,16 @@ Scripts/install-app.sh
 ```
 
 By default, the install script copies `dist/GMK67.app` to `~/Applications/GMK67.app` and opens it. Run `Scripts/build-app.sh` first if the app bundle does not exist.
+The script also prints the exact installed helper path and runs a read-only permission status check for it.
 
 ## macOS Permissions
 
 macOS can block HID access to keyboards unless the process opening the HID device has Input Monitoring permission.
 
-For the app, use the **Permission** button first. It runs the bundled helper's permission request so macOS attributes the request to the same executable that later opens HID:
+For the app, use the **Permission** button first. The app runs driver commands in-process so macOS attributes HID access to the app executable:
 
 ```text
-GMK67.app/Contents/Resources/Helper/gmk67
+~/Applications/GMK67.app/Contents/MacOS/GMK67
 ```
 
 Then enable the app or helper entry shown in:
@@ -102,6 +103,7 @@ System Settings > Privacy & Security > Input Monitoring
 ```
 
 After changing the setting, quit and reopen the app, then unplug and reconnect the keyboard.
+Avoid switching between `dist/GMK67.app` and `~/Applications/GMK67.app` while testing permissions; macOS treats those as different app bundles. The bundled `GMK67Helper` remains available for terminal-style support checks, but normal app actions open HID from the app process.
 
 For terminal use, grant Input Monitoring permission to the terminal app running `gmk67`, then rerun:
 

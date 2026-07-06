@@ -3,35 +3,54 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var model = DriverModel()
     @State private var selectedPage: AppPage? = .rgb
+    @State private var showsKeyboardPreview = true
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             SidebarView(selectedPage: $selectedPage)
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
-        } detail: {
+                .frame(width: 220)
+
+            Divider()
+
             VStack(spacing: 0) {
                 DeviceStatusBanner(model: model)
                     .padding(.horizontal, 18)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
+                HStack(spacing: 12) {
+                    Text((selectedPage ?? .rgb).title)
+                        .font(.title2.weight(.semibold))
+                    Spacer()
+                    CommandButton(
+                        showsKeyboardPreview ? "Hide Keyboard" : "Show Keyboard",
+                        systemImage: showsKeyboardPreview ? "keyboard.chevron.compact.down" : "keyboard"
+                    ) {
+                        showsKeyboardPreview.toggle()
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 8)
+
                 GeometryReader { geometry in
-                    let keyboardHeight = geometry.size.height * 0.5
+                    let keyboardHeight = min(max(geometry.size.height * 0.38, 190), 310)
 
                     VStack(spacing: 0) {
-                        VisualKeyboardView(model: model)
-                            .padding(.horizontal, 18)
-                            .frame(height: keyboardHeight)
+                        if showsKeyboardPreview {
+                            VisualKeyboardView(model: model)
+                                .padding(.horizontal, 18)
+                                .frame(height: keyboardHeight)
 
-                        Divider()
-                            .padding(.horizontal, 18)
+                            Divider()
+                                .padding(.horizontal, 18)
+                        }
 
                         ScrollView {
                             pageSettings(for: selectedPage ?? .rgb)
                                 .padding(18)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(height: geometry.size.height - keyboardHeight)
+                        .frame(height: showsKeyboardPreview ? geometry.size.height - keyboardHeight : geometry.size.height)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -40,10 +59,14 @@ struct ContentView: View {
                     model.clearOutput()
                 }
             }
-            .navigationTitle("GMK67")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(minWidth: 980, minHeight: 700)
         .task {
             model.refreshDeviceStatusIfNeeded()
+        }
+        .onDisappear {
+            model.stopLiveMonitoring()
         }
     }
 

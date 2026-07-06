@@ -3,6 +3,10 @@ import CoreGraphics
 import IOKit
 import IOKit.hid
 
+public func runGMK67Command(_ args: [String]) throws {
+    try run(args)
+}
+
 func run(_ args: [String]) throws {
     guard let command = args.dropFirst().first else {
         printUsage()

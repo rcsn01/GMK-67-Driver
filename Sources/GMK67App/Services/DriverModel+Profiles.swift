@@ -69,7 +69,9 @@ extension DriverModel {
         if unsafeKeymapWrites {
             args.append("--unsafe-no-backup")
         }
-        runLiveHID(args, title: "Apply current editor profile")
+        runLiveHIDCapture(args, title: "Apply current editor profile") {
+            self.requestCurrentRGBRefresh()
+        }
     }
 
     func saveCurrentProfileToLibrary() {
@@ -271,7 +273,9 @@ extension DriverModel {
         if unsafeKeymapWrites {
             args.append("--unsafe-no-backup")
         }
-        runLiveHID(args, title: "Apply saved profile")
+        runLiveHIDCapture(args, title: "Apply saved profile") {
+            self.requestCurrentRGBRefresh()
+        }
     }
 
     func deleteProfileLibraryEntry() {

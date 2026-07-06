@@ -12,12 +12,18 @@ let package = Package(
         .executable(name: "GMK67App", targets: ["GMK67App"])
     ],
     targets: [
+        .target(
+            name: "GMK67Core",
+            path: "Sources/GMK67Core"
+        ),
         .executableTarget(
             name: "GMK67Driver",
+            dependencies: ["GMK67Core"],
             path: "Sources/GMK67Driver"
         ),
         .executableTarget(
             name: "GMK67App",
+            dependencies: ["GMK67Core"],
             path: "Sources/GMK67App"
         )
     ]

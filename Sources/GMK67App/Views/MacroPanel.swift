@@ -6,7 +6,7 @@ struct MacroPanel: View {
     var body: some View {
         Panel("Macros") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                ControlGrid {
                     Text("Name")
                     TextField("Combo", text: $model.macroName)
                         .textFieldStyle(.roundedBorder)
@@ -26,8 +26,8 @@ struct MacroPanel: View {
                     }
                 }
 
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    GridRow {
+                VStack(alignment: .leading, spacing: 8) {
+                    ControlGrid {
                         Text("Add Event")
                         Picker("", selection: $model.macroBuilderEventKind) {
                             Text("Tap Key").tag("key")
@@ -63,15 +63,15 @@ struct MacroPanel: View {
                         }
                     }
 
-                    GridRow {
+                    ControlGrid(minimumWidth: 180) {
                         Text("Events")
                         TextField("down:control key:C up:control delay:50", text: $model.macroEventSpecs)
                             .textFieldStyle(.roundedBorder)
-                            .gridCellColumns(5)
+                            .frame(minWidth: 260)
                     }
                 }
 
-                HStack {
+                ControlGrid {
                     Text("Library")
                     Picker("", selection: $model.macroLibrarySlot) {
                         if model.macroLibraryEntries.isEmpty {
