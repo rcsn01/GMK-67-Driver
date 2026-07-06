@@ -286,10 +286,14 @@ Lighting/profile candidates:
   `short-op-validate`, and guarded `short-op-apply` now model this as a raw
   candidate container with `empty` and `static-80` template variants.
 - A keyboard/settings operation at VA `0x426FB0` sends `04 18`, then `04 17`,
-  one settings payload, and `04 02`. `gmk67 keyboard-settings-export` accepts
-  raw payload assignments for offsets `0x00...0x3D` and reserves `0x3E...0x3F`
-  for the `AA 55` marker. `keyboard-settings-validate` checks the sequence and
-  guarded `keyboard-settings-apply` sends only validated files.
+  one settings payload, and `04 02`. The surrounding load/apply routine at
+  `0x426BE0...0x427168` reads Windows config keys `gamemode`,
+  `disable_alttab`, `disable_altf4`, `disable_win`, `fn_switchfunction`, and
+  `sleep_light`, then writes them to payload offsets `0x01...0x06` before the
+  `AA 55` marker at offsets `0x3E...0x3F`. `gmk67 keyboard-settings-export`
+  accepts those named fields plus raw payload assignments for offsets
+  `0x00...0x3D`. `keyboard-settings-validate` checks the sequence and guarded
+  `keyboard-settings-apply` sends only validated files.
 - A custom lighting mode table path at VA `0x41DCD0` sends `04 18`, then
   `04 23` with byte 8 set to `03` or `09`, builds a per-key table with an
   `AA 55` marker, then finishes with `04 02` and `04 F0`.

@@ -1145,12 +1145,13 @@ func run(_ args: [String]) throws {
                 specs.append(argument)
             }
         }
-        let assignments = try parseRawByteAssignmentSpecs(specs, maxOffset: 0x3D, kind: "keyboard-settings")
+        let assignments = try parseKeyboardSettingsAssignmentSpecs(specs)
         let sequence = try keyboardSettingsFeatureSequence(profile: profile, payload: try keyboardSettingsPayload(assignments: assignments))
         try writeFeatureSequenceFile(sequence, path: path)
         print("Saved \(sequence.count) candidate keyboard-settings feature reports to \(path). No HID device was opened.")
         print("This models the Windows 04 18 / 04 17 / payload / 04 02 sequence with profile byte 0x\(String(format: "%02X", profile)).")
-        print("Writable payload bytes are offsets 0x00...0x3D; offsets 0x3E...0x3F contain the AA 55 marker.")
+        print("Known named fields: gamemode, disable-alttab, disable-altf4, disable-win, fn-switchfunction, sleep-light.")
+        print("Raw writable payload bytes are offsets 0x00...0x3D; offsets 0x3E...0x3F contain the AA 55 marker.")
         for assignment in assignments {
             print(String(format: "  %@ = %02X", assignment.label, assignment.value))
         }

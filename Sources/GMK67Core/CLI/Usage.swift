@@ -354,8 +354,10 @@ func printUsage() {
       short-op-apply <path> \(unsafeKeymapFlag) [--write-index=N]
           UNSAFE: validate and write an exported 04 13 short operation sequence.
 
-      keyboard-settings-export <path> [--profile=byte] [offset=byte ...]
+      keyboard-settings-export <path> [--profile=byte] [field=byte|offset=byte ...]
           Write the candidate 04 17 keyboard/settings payload sequence without HID.
+          Named fields: gamemode, disable-alttab, disable-altf4, disable-win,
+          fn-switchfunction, sleep-light. Boolean fields accept on/off or 1/0.
 
       keyboard-settings-validate <path>
           Validate an exported candidate 04 17 keyboard/settings payload sequence without HID.

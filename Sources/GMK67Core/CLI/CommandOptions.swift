@@ -377,6 +377,88 @@ func parseRawByteAssignmentSpecs(_ specs: [String], maxOffset: Int, kind: String
     return assignments
 }
 
+let keyboardSettingsKnownFields: [(name: String, offset: Int, windowsKey: String)] = [
+    ("gamemode", 0x01, "gamemode"),
+    ("disable-alttab", 0x02, "disable_alttab"),
+    ("disable-altf4", 0x03, "disable_altf4"),
+    ("disable-win", 0x04, "disable_win"),
+    ("fn-switchfunction", 0x05, "fn_switchfunction"),
+    ("sleep-light", 0x06, "sleep_light")
+]
+
+let keyboardSettingsFieldAliases: [String: String] = [
+    "gamemode": "gamemode",
+    "game-mode": "gamemode",
+    "game": "gamemode",
+    "disable-alttab": "disable-alttab",
+    "disable-alt-tab": "disable-alttab",
+    "alt-tab-lock": "disable-alttab",
+    "disable-altf4": "disable-altf4",
+    "disable-alt-f4": "disable-altf4",
+    "alt-f4-lock": "disable-altf4",
+    "disable-win": "disable-win",
+    "disable-windows": "disable-win",
+    "win-lock": "disable-win",
+    "windows-key-lock": "disable-win",
+    "fn-switchfunction": "fn-switchfunction",
+    "fn-switch-function": "fn-switchfunction",
+    "fn-switch": "fn-switchfunction",
+    "sleep-light": "sleep-light",
+    "light-sleep": "sleep-light",
+    "sleep": "sleep-light"
+]
+
+func normalizeKeyboardSettingsFieldName(_ name: String) -> String {
+    name
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: "_", with: "-")
+}
+
+func keyboardSettingsField(for rawName: String) -> (name: String, offset: Int, windowsKey: String)? {
+    let normalized = normalizeKeyboardSettingsFieldName(rawName)
+    let canonical = keyboardSettingsFieldAliases[normalized] ?? normalized
+    return keyboardSettingsKnownFields.first { $0.name == canonical }
+}
+
+func parseKeyboardSettingsFieldValue(_ value: String, field: String) throws -> UInt8 {
+    switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "true", "yes", "on", "enabled", "enable":
+        return 1
+    case "false", "no", "off", "disabled", "disable":
+        return 0
+    default:
+        return try parseOneByteLiteral(value, field: field)
+    }
+}
+
+func parseKeyboardSettingsAssignmentSpec(_ spec: String) throws -> ByteAssignment {
+    let assignment = spec.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+    guard assignment.count == 2, !assignment[0].isEmpty, !assignment[1].isEmpty else {
+        throw DriverError.invalidArgument("Invalid keyboard-settings assignment '\(spec)'. Use field=value or offset=value, for example gamemode=on or 0x01=01.")
+    }
+
+    let target = String(assignment[0])
+    let valueText = String(assignment[1])
+    if let field = keyboardSettingsField(for: target) {
+        let value = try parseKeyboardSettingsFieldValue(valueText, field: "keyboard-settings \(field.name)")
+        return ByteAssignment(index: field.offset, label: "\(field.name) (\(field.windowsKey), offset 0x\(String(format: "%02X", field.offset)))", value: value)
+    }
+
+    return try parseRawByteAssignmentSpec(spec, maxOffset: 0x3D, kind: "keyboard-settings")
+}
+
+func parseKeyboardSettingsAssignmentSpecs(_ specs: [String]) throws -> [ByteAssignment] {
+    let assignments = try specs.map(parseKeyboardSettingsAssignmentSpec)
+    var seenOffsets = Set<Int>()
+    for assignment in assignments {
+        guard seenOffsets.insert(assignment.index).inserted else {
+            throw DriverError.invalidArgument("Duplicate keyboard-settings byte offset in assignment list: \(assignment.label)")
+        }
+    }
+    return assignments
+}
+
 func applyRGBAssignments(_ assignments: [RGBAssignment], to frames: inout [[UInt8]]) throws {
     for assignment in assignments {
         try setRGBRecord(frames: &frames, lightIndex: assignment.lightIndex, color: assignment.color)
@@ -805,6 +887,10 @@ func validateKeyboardSettingsFeatureSequenceFile(_ path: String, printSummary: B
 
     if printSummary {
         print("Keyboard-settings sequence OK: 4 reports, selector 04 17 byte8=01, profile byte=\(String(format: "%02X", payloads[1][2])), AA 55 marker at payload offsets 0x3E...0x3F.")
+        print("Known keyboard-settings fields:")
+        for field in keyboardSettingsKnownFields {
+            print(String(format: "  %@ (%@, offset 0x%02X) = 0x%02X", field.name, field.windowsKey, field.offset, payloads[2][field.offset]))
+        }
         print("Non-zero keyboard-settings payload bytes:")
         printNonZeroRawBytes(payloads[2], markerRange: 0x3E..<0x40)
     }
@@ -1708,21 +1794,23 @@ func runSelfTest(verbose: Bool = true) throws {
         _ = try shortOperationTemplateFeatureSequence(variant: "unknown")
     }
 
-    let keyboardSettingsAssignments = try parseRawByteAssignmentSpecs(
-        ["0x01=01", "0x02=02", "0x06=04"],
-        maxOffset: 0x3D,
-        kind: "keyboard-settings"
-    )
+    let keyboardSettingsAssignments = try parseKeyboardSettingsAssignmentSpecs([
+        "gamemode=on",
+        "disable-win=true",
+        "sleep-light=30",
+        "0x07=04"
+    ])
     try assertSelfTest(
-        keyboardSettingsAssignments.map(\.index) == [0x01, 0x02, 0x06] &&
-            keyboardSettingsAssignments.map(\.value) == [0x01, 0x02, 0x04],
+        keyboardSettingsAssignments.map(\.index) == [0x01, 0x04, 0x06, 0x07] &&
+            keyboardSettingsAssignments.map(\.value) == [0x01, 0x01, 0x1E, 0x04],
         "keyboard settings assignment parsing"
     )
     let keyboardSettingsPayloadBytes = try keyboardSettingsPayload(assignments: keyboardSettingsAssignments)
     try assertSelfTest(
         keyboardSettingsPayloadBytes[0x01] == 0x01 &&
-            keyboardSettingsPayloadBytes[0x02] == 0x02 &&
-            keyboardSettingsPayloadBytes[0x06] == 0x04 &&
+            keyboardSettingsPayloadBytes[0x04] == 0x01 &&
+            keyboardSettingsPayloadBytes[0x06] == 0x1E &&
+            keyboardSettingsPayloadBytes[0x07] == 0x04 &&
             Array(keyboardSettingsPayloadBytes[0x3E..<0x40]) == [0xAA, 0x55],
         "keyboard settings payload"
     )
@@ -1743,10 +1831,10 @@ func runSelfTest(verbose: Bool = true) throws {
     let keyboardSettingsFileOptions = try parseUnsafeCandidateFileOptions([keyboardSettingsPath, unsafeKeymapFlag, "--write-index=6"], kind: "keyboard settings")
     try assertSelfTest(keyboardSettingsFileOptions.path == keyboardSettingsPath && keyboardSettingsFileOptions.writeIndex == 6, "keyboard settings apply option parsing")
     try expectInvalidArgument("keyboard settings duplicate offset") {
-        _ = try parseRawByteAssignmentSpecs(["0x01=01", "0x01=02"], maxOffset: 0x3D, kind: "keyboard-settings")
+        _ = try parseKeyboardSettingsAssignmentSpecs(["gamemode=on", "0x01=02"])
     }
     try expectInvalidArgument("keyboard settings marker guard") {
-        _ = try parseRawByteAssignmentSpecs(["0x3E=01"], maxOffset: 0x3D, kind: "keyboard-settings")
+        _ = try parseKeyboardSettingsAssignmentSpecs(["0x3E=01"])
     }
 
     let lightingTable = try customLightingRGBTable(assignments: profileAssignments)
@@ -2054,7 +2142,7 @@ func windowsFeatureInventoryText() -> String {
     Implemented as guarded protocol candidates:
       - Custom key remapping via 04 18 / 04 11 table sequence.
       - Alternate full table via 04 18 / 04 27 table sequence.
-      - Keyboard/settings payload via 04 18 / 04 17 / payload / 04 02.
+      - Keyboard/settings payload via 04 18 / 04 17 / payload / 04 02, including named gamemode, Alt-Tab, Alt-F4, Win-key, Fn-switch, and sleep-light fields.
       - Custom lighting RGB via 04 18 / 04 23 selector 09 table sequence.
       - Per-key lighting-mode/effect table via 04 18 / 04 23 selector 03.
       - Short lighting/profile operation via 04 18 / 04 13 / payload / 04 02 / 04 F0.
@@ -2063,7 +2151,7 @@ func windowsFeatureInventoryText() -> String {
     Windows UI feature groups not fully mapped to safe live firmware writes yet:
       - Board-side macro event encoding/readback.
       - High-level animated effect selection beyond candidate selector-03 tables.
-      - Light sleep time, brightness, speed, direction, game mode, and Win-key lock opcodes.
+      - Brightness, speed, and direction opcodes beyond the currently modeled RGB/lighting tables.
       - Open program, open website, send text, switch configuration, and multi-key action records.
       - Device-side profile save/load/readback and true vendor factory reset opcode.
       - Mouse-only panels from the shared driver shell: DPI, report rate, wheel speed, and pointer settings.
@@ -2109,9 +2197,11 @@ func protocolCandidatesText() -> String {
       Keyboard/settings payload
         begin:   04 18
         select:  04 17, byte2 = profile byte, byte8 = 01
-        payload: one 64-byte report; AA 55 marker at payload offsets 0x3E...0x3F
+        payload: one 64-byte report; known offsets are gamemode=0x01, disable_alttab=0x02,
+                 disable_altf4=0x03, disable_win=0x04, fn_switchfunction=0x05,
+                 sleep_light=0x06; AA 55 marker at payload offsets 0x3E...0x3F
         commit:  04 02
-        status:  raw offset template export/validate implemented; flag meanings remain unmapped
+        status:  named/raw export and validate implemented; live writes guarded
 
       Custom lighting mode table
         begin:   04 18

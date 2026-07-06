@@ -318,7 +318,7 @@ Candidate lighting commands are available for controlled protocol testing:
 .build/debug/gmk67 lighting-effect-export breath.hex breath
 .build/debug/gmk67 short-op-template short-op.hex static-80
 .build/debug/gmk67 short-op-validate short-op.hex
-.build/debug/gmk67 keyboard-settings-export keyboard-settings.hex 0x01=01 0x02=01
+.build/debug/gmk67 keyboard-settings-export keyboard-settings.hex gamemode=on disable-win=on sleep-light=30
 .build/debug/gmk67 keyboard-settings-validate keyboard-settings.hex
 ```
 
