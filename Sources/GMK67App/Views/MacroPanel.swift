@@ -113,7 +113,20 @@ struct MacroPanel: View {
                     }
                 }
 
-                Text("Macro profiles are app-local JSON artifacts for now. The Windows app exposes Macro Manager, but the board-side macro write/readback protocol is still unmapped.")
+                ControlGrid {
+                    Text("Firmware")
+                    CommandButton("Export Template", systemImage: "square.and.arrow.up") {
+                        model.exportMacroFirmwareTemplate()
+                    }
+                    CommandButton("Validate", systemImage: "checkmark.seal") {
+                        model.validateMacroFirmwareTemplate()
+                    }
+                    CommandButton("Apply", systemImage: "bolt.trianglebadge.exclamationmark") {
+                        model.applyMacroFirmwareTemplate()
+                    }
+                }
+
+                Text("Macro profiles are app-local JSON artifacts. The Windows macro firmware container is modeled as a guarded candidate; board-side macro event encoding and readback are still unmapped.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

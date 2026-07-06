@@ -32,13 +32,13 @@ Working today:
 - RGB profile save, restore, dry-run validation, automatic backups, and latest-backup restore.
 - Combined profile files that compose RGB presets, custom RGB maps, and optional keymap data.
 - App-local profile, keymap, and macro libraries with JSON backup/restore.
-- Offline keymap, lighting, and alternate-table artifact generation/validation for protocol testing.
+- Offline keymap, lighting, macro firmware container, and alternate-table artifact generation/validation for protocol testing.
 
 Experimental or incomplete:
 
 - Keymap writes are guarded because keymap readback/backup is not proven.
 - Candidate lighting/effect writes are guarded and may not visibly change the keyboard.
-- Board-side macro storage/writeback is not mapped yet.
+- Board-side macro event encoding/readback is not mapped yet.
 - Animated lighting effect selection is not proven as a high-level firmware command.
 
 For deeper protocol details, see `docs/reverse-engineering.md`.
@@ -285,7 +285,9 @@ Keymap writes are guarded because this project does not yet have a proven board-
 
 ### Macros
 
-Macro support currently creates and manages app-local JSON artifacts. It does not write macros to the keyboard firmware.
+Macro support creates and manages app-local JSON artifacts. The driver also models
+the Windows macro firmware table container as a guarded candidate artifact; it
+does not yet encode app-local macro JSON events into firmware records.
 
 ```sh
 .build/debug/gmk67 macro-create combo.json --name=Combo --repeat=1 down:control key:C up:control
@@ -293,6 +295,15 @@ Macro support currently creates and manages app-local JSON artifacts. It does no
 .build/debug/gmk67 macro-library-create --slot=copy --name=Copy down:control key:C up:control
 .build/debug/gmk67 macro-library-list
 .build/debug/gmk67 macro-library-bundle-export gmk67-macro-library.json
+.build/debug/gmk67 macro-firmware-template macro-fw.hex
+.build/debug/gmk67 macro-firmware-validate macro-fw.hex
+```
+
+Live macro firmware candidate writes require `--unsafe-no-backup` and should only
+be used with captured/understood firmware tables:
+
+```sh
+.build/debug/gmk67 macro-firmware-apply macro-fw.hex --unsafe-no-backup
 ```
 
 ### Experimental Lighting
@@ -305,12 +316,18 @@ Candidate lighting commands are available for controlled protocol testing:
 .build/debug/gmk67 lighting-mode-validate wasd-mode.hex
 .build/debug/gmk67 lighting-effect-list
 .build/debug/gmk67 lighting-effect-export breath.hex breath
+.build/debug/gmk67 short-op-template short-op.hex static-80
+.build/debug/gmk67 short-op-validate short-op.hex
+.build/debug/gmk67 keyboard-settings-export keyboard-settings.hex 0x01=01 0x02=01
+.build/debug/gmk67 keyboard-settings-validate keyboard-settings.hex
 ```
 
 Live candidate lighting writes require `--unsafe-no-backup`:
 
 ```sh
 .build/debug/gmk67 lighting-effect-apply breath --unsafe-no-backup
+.build/debug/gmk67 short-op-apply short-op.hex --unsafe-no-backup
+.build/debug/gmk67 keyboard-settings-apply keyboard-settings.hex --unsafe-no-backup
 ```
 
 These commands may not visibly change lighting. The known reliable path for color changes is the RGB preset/table path.
@@ -351,6 +368,7 @@ Useful read-only reports:
 
 ```sh
 .build/debug/gmk67 protocol-candidates
+.build/debug/gmk67 windows-features
 .build/debug/gmk67 diagnostics
 .build/debug/gmk67 support-bundle
 ```

@@ -334,6 +334,49 @@ func parseByteAssignmentSpecs(_ specs: [String], keyMap: [Int: KeyItem] = keyMap
     return assignments
 }
 
+func parseOneByteLiteral(_ argument: String, field: String) throws -> UInt8 {
+    let lowercased = argument.lowercased()
+    if lowercased.hasPrefix("0x") {
+        let value = String(lowercased.dropFirst(2))
+        guard let parsed = UInt8(value, radix: 16) else {
+            throw DriverError.invalidArgument("Invalid \(field) byte value: \(argument)")
+        }
+        return parsed
+    }
+    if let parsed = UInt8(argument, radix: 10) {
+        return parsed
+    }
+    let bytes = try parseHexBytes(argument)
+    guard bytes.count == 1 else {
+        throw DriverError.invalidArgument("\(field) must be exactly one byte: \(argument)")
+    }
+    return bytes[0]
+}
+
+func parseRawByteAssignmentSpec(_ spec: String, maxOffset: Int, kind: String) throws -> ByteAssignment {
+    let assignment = spec.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+    guard assignment.count == 2, !assignment[0].isEmpty, !assignment[1].isEmpty else {
+        throw DriverError.invalidArgument("Invalid \(kind) byte assignment '\(spec)'. Use offset=value, for example 0x01=01.")
+    }
+    let offset = Int(try parseOneByteLiteral(String(assignment[0]), field: "\(kind) offset"))
+    guard offset <= maxOffset else {
+        throw DriverError.invalidArgument("\(kind) offset 0x\(String(format: "%02X", offset)) is outside the writable range 0x00...0x\(String(format: "%02X", maxOffset)).")
+    }
+    let value = try parseOneByteLiteral(String(assignment[1]), field: "\(kind) value")
+    return ByteAssignment(index: offset, label: String(format: "0x%02X", offset), value: value)
+}
+
+func parseRawByteAssignmentSpecs(_ specs: [String], maxOffset: Int, kind: String) throws -> [ByteAssignment] {
+    let assignments = try specs.map { try parseRawByteAssignmentSpec($0, maxOffset: maxOffset, kind: kind) }
+    var seenOffsets = Set<Int>()
+    for assignment in assignments {
+        guard seenOffsets.insert(assignment.index).inserted else {
+            throw DriverError.invalidArgument("Duplicate \(kind) byte offset in assignment list: \(assignment.label)")
+        }
+    }
+    return assignments
+}
+
 func applyRGBAssignments(_ assignments: [RGBAssignment], to frames: inout [[UInt8]]) throws {
     for assignment in assignments {
         try setRGBRecord(frames: &frames, lightIndex: assignment.lightIndex, color: assignment.color)
@@ -618,6 +661,86 @@ func lightingModeFeatureSequence(table: [UInt8]) -> [[UInt8]] {
     return [begin, select] + windowsChunkedFeaturePayloads(table, declaredLength: table.count) + [commit, finish]
 }
 
+let defaultMacroFirmwareChunkCount = 8
+let maxMacroFirmwareChunkCount = 0x38
+
+func macroFirmwareTemplateFeatureSequence(chunkCount: Int = defaultMacroFirmwareChunkCount) throws -> [[UInt8]] {
+    guard chunkCount >= 1, chunkCount <= maxMacroFirmwareChunkCount else {
+        throw DriverError.invalidArgument("Macro firmware chunk count must be between 1 and \(maxMacroFirmwareChunkCount).")
+    }
+
+    let begin = [0x04, 0x19] + [UInt8](repeating: 0, count: 62)
+    var select = [UInt8](repeating: 0, count: 64)
+    select[0] = 0x04
+    select[1] = 0x15
+    select[8] = UInt8(chunkCount)
+
+    var table = [UInt8](repeating: 0, count: chunkCount * 64)
+    table[table.count - 2] = 0xAA
+    table[table.count - 1] = 0x55
+
+    let chunks = stride(from: 0, to: table.count, by: 64).map { offset in
+        Array(table[offset..<(offset + 64)])
+    }
+    let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
+    return [begin, select] + chunks + [commit]
+}
+
+func shortOperationTemplatePayload(variant: String) throws -> [UInt8] {
+    var payload = [UInt8](repeating: 0, count: 64)
+    switch variant {
+    case "empty":
+        break
+    case "static-80":
+        payload[0] = 0x80
+        payload[9] = 0x0F
+        payload[10] = 0x0F
+    default:
+        throw DriverError.invalidArgument("Unknown short-op template variant: \(variant). Use empty or static-80.")
+    }
+    payload[14] = 0xAA
+    payload[15] = 0x55
+    return payload
+}
+
+func shortOperationTemplateFeatureSequence(variant: String = "empty") throws -> [[UInt8]] {
+    let begin = [0x04, 0x18] + [UInt8](repeating: 0, count: 62)
+    var select = [UInt8](repeating: 0, count: 64)
+    select[0] = 0x04
+    select[1] = 0x13
+    select[8] = 0x01
+    let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
+    let finish = [0x04, 0xF0] + [UInt8](repeating: 0, count: 62)
+    return [begin, select, try shortOperationTemplatePayload(variant: variant), commit, finish]
+}
+
+func keyboardSettingsPayload(assignments: [ByteAssignment]) throws -> [UInt8] {
+    var payload = [UInt8](repeating: 0, count: 64)
+    for assignment in assignments {
+        guard assignment.index <= 0x3D else {
+            throw DriverError.invalidArgument("Keyboard-settings payload offset 0x\(String(format: "%02X", assignment.index)) overlaps the AA 55 marker.")
+        }
+        payload[assignment.index] = assignment.value
+    }
+    payload[0x3E] = 0xAA
+    payload[0x3F] = 0x55
+    return payload
+}
+
+func keyboardSettingsFeatureSequence(profile: UInt8 = 0, payload: [UInt8]) throws -> [[UInt8]] {
+    guard payload.count == 64 else {
+        throw DriverError.invalidArgument("Keyboard-settings payload must be exactly 64 bytes.")
+    }
+    let begin = [0x04, 0x18] + [UInt8](repeating: 0, count: 62)
+    var select = [UInt8](repeating: 0, count: 64)
+    select[0] = 0x04
+    select[1] = 0x17
+    select[2] = profile
+    select[8] = 0x01
+    let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
+    return [begin, select, payload, commit]
+}
+
 func windowsChunkedFeaturePayloads(_ payload: [UInt8], declaredLength: Int) -> [[UInt8]] {
     if declaredLength <= 0x41 {
         let bodyLength = min(payload.count, 64)
@@ -654,6 +777,124 @@ func readFeatureSequenceFile(_ path: String) throws -> [[UInt8]] {
         .map { try parseHexBytes(String($0)) }
     guard !payloads.isEmpty else {
         throw DriverError.invalidArgument("Feature sequence file is empty: \(path)")
+    }
+    return payloads
+}
+
+@discardableResult
+func validateKeyboardSettingsFeatureSequenceFile(_ path: String, printSummary: Bool = true) throws -> [[UInt8]] {
+    let payloads = try readFeatureSequenceFile(path)
+    guard payloads.count == 4 else {
+        throw DriverError.invalidArgument("Expected 4 keyboard-settings feature reports, found \(payloads.count).")
+    }
+    guard payloads.allSatisfy({ $0.count == 64 }) else {
+        throw DriverError.invalidArgument("Every keyboard-settings feature report must contain exactly 64 bytes.")
+    }
+    guard Array(payloads[0].prefix(2)) == [0x04, 0x18] else {
+        throw DriverError.invalidArgument("Report #001 must begin with 04 18.")
+    }
+    guard Array(payloads[1].prefix(2)) == [0x04, 0x17], payloads[1][8] == 0x01 else {
+        throw DriverError.invalidArgument("Report #002 must begin with 04 17 and have byte 8 set to 01.")
+    }
+    guard payloads[2][0x3E] == 0xAA, payloads[2][0x3F] == 0x55 else {
+        throw DriverError.invalidArgument("Report #003 must contain AA 55 at payload offsets 0x3E...0x3F.")
+    }
+    guard Array(payloads[3].prefix(2)) == [0x04, 0x02] else {
+        throw DriverError.invalidArgument("Report #004 must begin with 04 02.")
+    }
+
+    if printSummary {
+        print("Keyboard-settings sequence OK: 4 reports, selector 04 17 byte8=01, profile byte=\(String(format: "%02X", payloads[1][2])), AA 55 marker at payload offsets 0x3E...0x3F.")
+        print("Non-zero keyboard-settings payload bytes:")
+        printNonZeroRawBytes(payloads[2], markerRange: 0x3E..<0x40)
+    }
+    return payloads
+}
+
+func printNonZeroRawBytes(_ bytes: [UInt8], markerRange: Range<Int>? = nil) {
+    var count = 0
+    for (offset, byte) in bytes.enumerated() {
+        guard byte != 0 else { continue }
+        if let markerRange, markerRange.contains(offset) {
+            continue
+        }
+        count += 1
+        print(String(format: "  offset=0x%03X value=0x%02X", offset, byte))
+    }
+    if count == 0 {
+        print("  none")
+    }
+}
+
+@discardableResult
+func validateMacroFirmwareFeatureSequenceFile(_ path: String, printSummary: Bool = true) throws -> [[UInt8]] {
+    let payloads = try readFeatureSequenceFile(path)
+    guard payloads.count >= 4 else {
+        throw DriverError.invalidArgument("Expected at least 4 macro firmware feature reports, found \(payloads.count).")
+    }
+    guard payloads.allSatisfy({ $0.count == 64 }) else {
+        throw DriverError.invalidArgument("Every macro firmware feature report must contain exactly 64 bytes.")
+    }
+    guard Array(payloads[0].prefix(2)) == [0x04, 0x19] else {
+        throw DriverError.invalidArgument("Report #001 must begin with 04 19.")
+    }
+    guard Array(payloads[1].prefix(2)) == [0x04, 0x15] else {
+        throw DriverError.invalidArgument("Report #002 must begin with 04 15.")
+    }
+    guard Array(payloads.last!.prefix(2)) == [0x04, 0x02] else {
+        throw DriverError.invalidArgument("Final report must begin with 04 02.")
+    }
+
+    let chunkCount = Int(payloads[1][8])
+    guard chunkCount >= 1, chunkCount <= maxMacroFirmwareChunkCount else {
+        throw DriverError.invalidArgument("Report #002 byte 8 must declare 1...\(maxMacroFirmwareChunkCount) table chunks.")
+    }
+    guard payloads.count == chunkCount + 3 else {
+        throw DriverError.invalidArgument("Report #002 declares \(chunkCount) table chunks, but file contains \(payloads.count - 3).")
+    }
+
+    let table = Array(payloads[2..<(2 + chunkCount)].joined())
+    guard table[table.count - 2] == 0xAA, table[table.count - 1] == 0x55 else {
+        throw DriverError.invalidArgument("Expected AA 55 marker at the end of the macro firmware table.")
+    }
+
+    if printSummary {
+        print("Macro firmware sequence OK: \(payloads.count) reports, selector 04 15 byte8=\(String(format: "%02X", chunkCount)), \(chunkCount) table chunks, AA 55 marker at final table bytes.")
+        print("Non-zero macro firmware bytes:")
+        printNonZeroRawBytes(table, markerRange: (table.count - 2)..<table.count)
+    }
+    return payloads
+}
+
+@discardableResult
+func validateShortOperationFeatureSequenceFile(_ path: String, printSummary: Bool = true) throws -> [[UInt8]] {
+    let payloads = try readFeatureSequenceFile(path)
+    guard payloads.count == 5 else {
+        throw DriverError.invalidArgument("Expected 5 short-op feature reports, found \(payloads.count).")
+    }
+    guard payloads.allSatisfy({ $0.count == 64 }) else {
+        throw DriverError.invalidArgument("Every short-op feature report must contain exactly 64 bytes.")
+    }
+    guard Array(payloads[0].prefix(2)) == [0x04, 0x18] else {
+        throw DriverError.invalidArgument("Report #001 must begin with 04 18.")
+    }
+    guard Array(payloads[1].prefix(2)) == [0x04, 0x13], payloads[1][8] == 0x01 else {
+        throw DriverError.invalidArgument("Report #002 must begin with 04 13 and have byte 8 set to 01.")
+    }
+    guard payloads[2][14] == 0xAA, payloads[2][15] == 0x55 else {
+        throw DriverError.invalidArgument("Report #003 must contain AA 55 at payload offsets 0x0E...0x0F.")
+    }
+    guard Array(payloads[3].prefix(2)) == [0x04, 0x02] else {
+        throw DriverError.invalidArgument("Report #004 must begin with 04 02.")
+    }
+    guard Array(payloads[4].prefix(2)) == [0x04, 0xF0] else {
+        throw DriverError.invalidArgument("Report #005 must begin with 04 F0.")
+    }
+
+    if printSummary {
+        print("Short operation sequence OK: 5 reports, selector 04 13 byte8=01, AA 55 marker at payload offsets 0x0E...0x0F.")
+        print("Non-zero short-op payload bytes:")
+        printNonZeroRawBytes(payloads[2], markerRange: 14..<16)
     }
     return payloads
 }
@@ -1235,6 +1476,31 @@ func runSelfTest(verbose: Bool = true) throws {
     try expectInvalidArgument("macro empty") {
         _ = try parseMacroCreateOptions(["empty.json"])
     }
+    let macroFirmwareSequence = try macroFirmwareTemplateFeatureSequence()
+    try assertSelfTest(macroFirmwareSequence.count == defaultMacroFirmwareChunkCount + 3, "macro firmware sequence report count")
+    try assertSelfTest(Array(macroFirmwareSequence[0].prefix(2)) == [0x04, 0x19], "macro firmware begin report")
+    try assertSelfTest(
+        Array(macroFirmwareSequence[1].prefix(2)) == [0x04, 0x15] &&
+            macroFirmwareSequence[1][8] == UInt8(defaultMacroFirmwareChunkCount),
+        "macro firmware selector report"
+    )
+    try assertSelfTest(
+        Array(macroFirmwareSequence[defaultMacroFirmwareChunkCount + 1][62..<64]) == [0xAA, 0x55],
+        "macro firmware marker"
+    )
+    try assertSelfTest(
+        Array(macroFirmwareSequence[defaultMacroFirmwareChunkCount + 2].prefix(2)) == [0x04, 0x02],
+        "macro firmware commit report"
+    )
+    let macroFirmwarePath = tempDirectory.appendingPathComponent("macro-firmware.hex").path
+    try writeFeatureSequenceFile(macroFirmwareSequence, path: macroFirmwarePath)
+    let validatedMacroFirmwareSequence = try validateMacroFirmwareFeatureSequenceFile(macroFirmwarePath, printSummary: verbose)
+    try assertSelfTest(validatedMacroFirmwareSequence == macroFirmwareSequence, "macro firmware validation returns original sequence")
+    let macroFirmwareFileOptions = try parseUnsafeCandidateFileOptions([macroFirmwarePath, unsafeKeymapFlag, "--write-index=5"], kind: "macro firmware")
+    try assertSelfTest(macroFirmwareFileOptions.path == macroFirmwarePath && macroFirmwareFileOptions.writeIndex == 5, "macro firmware apply option parsing")
+    try expectInvalidArgument("macro firmware chunk guard") {
+        _ = try macroFirmwareTemplateFeatureSequence(chunkCount: maxMacroFirmwareChunkCount + 1)
+    }
 
     let combinedProfileOptions = try parseProfileCreateOptions([
         "combined.gmk67-profile.json",
@@ -1416,6 +1682,73 @@ func runSelfTest(verbose: Bool = true) throws {
         _ = try readRGBFramesFile(keymapPath)
     }
 
+    let shortOperationSequence = try shortOperationTemplateFeatureSequence()
+    try assertSelfTest(shortOperationSequence.count == 5, "short-op sequence report count")
+    try assertSelfTest(Array(shortOperationSequence[0].prefix(2)) == [0x04, 0x18], "short-op begin report")
+    try assertSelfTest(
+        Array(shortOperationSequence[1].prefix(2)) == [0x04, 0x13] &&
+            shortOperationSequence[1][8] == 0x01,
+        "short-op selector report"
+    )
+    try assertSelfTest(Array(shortOperationSequence[2][14..<16]) == [0xAA, 0x55], "short-op marker")
+    try assertSelfTest(Array(shortOperationSequence[3].prefix(2)) == [0x04, 0x02], "short-op commit report")
+    try assertSelfTest(Array(shortOperationSequence[4].prefix(2)) == [0x04, 0xF0], "short-op finish report")
+    let staticShortOperationSequence = try shortOperationTemplateFeatureSequence(variant: "static-80")
+    try assertSelfTest(
+        staticShortOperationSequence[2][0] == 0x80 &&
+            staticShortOperationSequence[2][9] == 0x0F &&
+            staticShortOperationSequence[2][10] == 0x0F,
+        "short-op static-80 template"
+    )
+    let shortOperationPath = tempDirectory.appendingPathComponent("short-op.hex").path
+    try writeFeatureSequenceFile(shortOperationSequence, path: shortOperationPath)
+    let validatedShortOperationSequence = try validateShortOperationFeatureSequenceFile(shortOperationPath, printSummary: verbose)
+    try assertSelfTest(validatedShortOperationSequence == shortOperationSequence, "short-op validation returns original sequence")
+    try expectInvalidArgument("short-op unknown variant") {
+        _ = try shortOperationTemplateFeatureSequence(variant: "unknown")
+    }
+
+    let keyboardSettingsAssignments = try parseRawByteAssignmentSpecs(
+        ["0x01=01", "0x02=02", "0x06=04"],
+        maxOffset: 0x3D,
+        kind: "keyboard-settings"
+    )
+    try assertSelfTest(
+        keyboardSettingsAssignments.map(\.index) == [0x01, 0x02, 0x06] &&
+            keyboardSettingsAssignments.map(\.value) == [0x01, 0x02, 0x04],
+        "keyboard settings assignment parsing"
+    )
+    let keyboardSettingsPayloadBytes = try keyboardSettingsPayload(assignments: keyboardSettingsAssignments)
+    try assertSelfTest(
+        keyboardSettingsPayloadBytes[0x01] == 0x01 &&
+            keyboardSettingsPayloadBytes[0x02] == 0x02 &&
+            keyboardSettingsPayloadBytes[0x06] == 0x04 &&
+            Array(keyboardSettingsPayloadBytes[0x3E..<0x40]) == [0xAA, 0x55],
+        "keyboard settings payload"
+    )
+    let keyboardSettingsSequence = try keyboardSettingsFeatureSequence(profile: 0x02, payload: keyboardSettingsPayloadBytes)
+    try assertSelfTest(keyboardSettingsSequence.count == 4, "keyboard settings sequence report count")
+    try assertSelfTest(Array(keyboardSettingsSequence[0].prefix(2)) == [0x04, 0x18], "keyboard settings begin report")
+    try assertSelfTest(
+        Array(keyboardSettingsSequence[1].prefix(2)) == [0x04, 0x17] &&
+            keyboardSettingsSequence[1][2] == 0x02 &&
+            keyboardSettingsSequence[1][8] == 0x01,
+        "keyboard settings selector report"
+    )
+    try assertSelfTest(Array(keyboardSettingsSequence[3].prefix(2)) == [0x04, 0x02], "keyboard settings commit report")
+    let keyboardSettingsPath = tempDirectory.appendingPathComponent("keyboard-settings.hex").path
+    try writeFeatureSequenceFile(keyboardSettingsSequence, path: keyboardSettingsPath)
+    let validatedKeyboardSettingsSequence = try validateKeyboardSettingsFeatureSequenceFile(keyboardSettingsPath, printSummary: verbose)
+    try assertSelfTest(validatedKeyboardSettingsSequence == keyboardSettingsSequence, "keyboard settings validation returns original sequence")
+    let keyboardSettingsFileOptions = try parseUnsafeCandidateFileOptions([keyboardSettingsPath, unsafeKeymapFlag, "--write-index=6"], kind: "keyboard settings")
+    try assertSelfTest(keyboardSettingsFileOptions.path == keyboardSettingsPath && keyboardSettingsFileOptions.writeIndex == 6, "keyboard settings apply option parsing")
+    try expectInvalidArgument("keyboard settings duplicate offset") {
+        _ = try parseRawByteAssignmentSpecs(["0x01=01", "0x01=02"], maxOffset: 0x3D, kind: "keyboard-settings")
+    }
+    try expectInvalidArgument("keyboard settings marker guard") {
+        _ = try parseRawByteAssignmentSpecs(["0x3E=01"], maxOffset: 0x3D, kind: "keyboard-settings")
+    }
+
     let lightingTable = try customLightingRGBTable(assignments: profileAssignments)
     try assertSelfTest(lightingTable.count == 0x280, "custom lighting RGB table length")
     try assertSelfTest(Array(lightingTable[0x09C..<0x0A0]) == [0x27, 0xFF, 0x00, 0x00], "custom lighting W RGB record")
@@ -1585,7 +1918,7 @@ func readinessReport(openCheck: Bool) -> String {
     do {
         try runSelfTest(verbose: false)
         add("Offline encoders: OK")
-        add("  RGB tables, profiles, keymap sequences, and candidate lighting artifacts validate locally.")
+        add("  RGB tables, profiles, keymap sequences, short-op/settings candidates, candidate lighting artifacts, and macro firmware containers validate locally.")
     } catch {
         add("Offline encoders: FAIL")
         add("  \(error)")
@@ -1662,7 +1995,10 @@ func readinessReport(openCheck: Bool) -> String {
     add("  RGB profiles/presets/custom maps: implemented.")
     add("  Combined profile preview/export: implemented offline.")
     add("  Key remap encoding/presets/custom profiles: implemented, live writes guarded by \(unsafeKeymapFlag).")
+    add("  Candidate short lighting/profile operation: export/validate implemented, live writes guarded.")
+    add("  Candidate keyboard/settings payload: export/validate implemented, live writes guarded.")
     add("  Candidate lighting/custom-table operations: export/validate implemented, live writes guarded.")
+    add("  Candidate macro firmware table container: export/validate implemented, live writes guarded.")
     add("  Keymap readback/backup: not proven yet.")
 
     add("")
@@ -1697,6 +2033,49 @@ func printProtocolCandidates() {
     print(protocolCandidatesText())
 }
 
+func windowsFeatureInventoryText() -> String {
+    """
+    GMK67 Windows software feature inventory
+
+    Sources:
+      BOYI GMK67 Driver V1.5 and Zuoya GMK67 Keyboard Setup extracted with innoextract.
+      DeviceDriver.exe imports HidD_SetFeature/GetFeature and stores editor state in local SQLite tables.
+      The English language resource and embedded SQLite schema identify these UI feature groups.
+
+    Implemented with proven live RGB path:
+      - Per-key static RGB readback/write through 04 F5, 04 20, and 04 02.
+      - RGB save, restore, backups, built-in presets, and combined profile RGB sections.
+
+    Implemented as app-local profile/library features:
+      - Configuration profiles, import/export, rename/delete through JSON profile libraries.
+      - Macro Manager JSON profiles with key, down, up, delay, text, repeat count, and library bundles.
+      - Keymap profile/library JSON artifacts and combined app-library backup/restore.
+
+    Implemented as guarded protocol candidates:
+      - Custom key remapping via 04 18 / 04 11 table sequence.
+      - Alternate full table via 04 18 / 04 27 table sequence.
+      - Keyboard/settings payload via 04 18 / 04 17 / payload / 04 02.
+      - Custom lighting RGB via 04 18 / 04 23 selector 09 table sequence.
+      - Per-key lighting-mode/effect table via 04 18 / 04 23 selector 03.
+      - Short lighting/profile operation via 04 18 / 04 13 / payload / 04 02 / 04 F0.
+      - Macro firmware table container via 04 19 / 04 15 / 04 02 template and validator.
+
+    Windows UI feature groups not fully mapped to safe live firmware writes yet:
+      - Board-side macro event encoding/readback.
+      - High-level animated effect selection beyond candidate selector-03 tables.
+      - Light sleep time, brightness, speed, direction, game mode, and Win-key lock opcodes.
+      - Open program, open website, send text, switch configuration, and multi-key action records.
+      - Device-side profile save/load/readback and true vendor factory reset opcode.
+      - Mouse-only panels from the shared driver shell: DPI, report rate, wheel speed, and pointer settings.
+
+    Persistence finding:
+      The Windows static RGB write path observed at VA 0x418500 and 0x425E03 sends 04 20,
+      writes table chunks, then sends 04 02. No separate RGB save-to-flash opcode has been
+      proven on that path. The Windows profile persistence visible in strings is primarily
+      local SQLite state; firmware persistence still needs physical reboot validation.
+    """
+}
+
 func protocolCandidatesText() -> String {
     """
     GMK67 protocol candidates from DeviceDriver.exe
@@ -1725,7 +2104,14 @@ func protocolCandidatesText() -> String {
         payload: one 64-byte report; observed AA 55 marker inside payload
         commit:  04 02
         finish:  04 F0
-        status:  not implemented as a live command
+        status:  template export/validate implemented; live writes guarded
+
+      Keyboard/settings payload
+        begin:   04 18
+        select:  04 17, byte2 = profile byte, byte8 = 01
+        payload: one 64-byte report; AA 55 marker at payload offsets 0x3E...0x3F
+        commit:  04 02
+        status:  raw offset template export/validate implemented; flag meanings remain unmapped
 
       Custom lighting mode table
         begin:   04 18
@@ -1734,6 +2120,13 @@ func protocolCandidatesText() -> String {
         commit:  04 02
         finish:  04 F0
         status:  selector 03 export/validate and Windows-named effect artifacts implemented; live writes guarded
+
+      Macro firmware table container
+        begin:   04 19
+        select:  04 15, byte8 = table chunk count
+        table:   variable count of 64-byte reports; observed empty/minimum container uses 8 chunks
+        commit:  04 02
+        status:  zeroed template export/validate implemented; event encoding remains unmapped
 
       Alternate full-table operation
         begin:   04 18

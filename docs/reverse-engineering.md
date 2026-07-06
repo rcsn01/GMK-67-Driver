@@ -25,6 +25,33 @@ Important current findings:
 - It verifies HID caps against usage page `0xFFFF` and usage `0x0001` before
   keeping a device handle.
 
+Windows feature inventory:
+
+- The shared Windows shell exposes driver management, language/settings,
+  software update, firmware update, battery/status, auto-start, game mode, and
+  factory reset UI.
+- Keyboard panels include configuration profiles, import/export/copy/rename/
+  delete, top layer and Fn layer editing, custom key assignment, light effect
+  mode, custom lighting, and key light customization.
+- Key assignment categories include disabled/default key functions, macro
+  definition, mouse functions, multimedia, Windows shortcuts, open program,
+  open website, send text, switch configuration, and multiple keys.
+- Macro Manager exposes keyboard, mouse, delay, record/stop, repeat count,
+  play-once, play-N-times, stop-when-pressed-again, and import/export flows.
+- Lighting UI strings include Static, SingleOn, SingleOff, Glittering, Falling,
+  Colourful, Breath, Spectrum, Outward, Scrolling, Rolling, Rotating, Explode,
+  Launch, Ripples, Flowing, Pulsating, Tilt, Shuttle, LED Off, Inwards, and
+  Floweriness, plus brightness, speed, direction, random/preset colors, light
+  sleep time, select all, and reset selected.
+- `DeviceDriver.exe` embeds SQLite table names for app-local state, including
+  `t_configdata`, `t_light_data`, `t_key_rgb_data`, `t_keyprofile`,
+  `t_key_data`, `t_macro_data`, `t_macrorecord`, `t_key_otherdata`,
+  `t_customlight_data`, `t_customrgb_data`, `t_custommodergb_data`, and
+  `t_musiclayer_data`.
+- The extracted mouse/DPI/report-rate strings appear to come from the same
+  generic driver shell. They are inventoried but not GMK67 keyboard firmware
+  targets until a matching GMK67 HID path is found.
+
 Current driver status:
 
 - `gmk67 list` enumerates the exact GMK67 configuration interface on macOS.
@@ -62,9 +89,11 @@ Current driver status:
 - `gmk67 macro-*` and `macro-library-*` commands model the Windows app's Macro
   Manager as validated app-local JSON artifacts with key/down/up/delay/text
   events. `macro-library-bundle-export` and `macro-library-bundle-import` move
-  the whole app-local macro library as one validated JSON bundle. They
-  deliberately do not send HID reports because the board-side macro storage
-  protocol has not been mapped yet.
+  the whole app-local macro library as one validated JSON bundle. `gmk67
+  macro-firmware-template`, `macro-firmware-validate`, and
+  `macro-firmware-apply` model the Windows macro firmware table container, but
+  event-record encoding and readback are still unmapped; live writes remain
+  guarded by `--unsafe-no-backup`.
 - `GMK67.app` is a native macOS SwiftUI wrapper that bundles the same `gmk67`
   helper and exposes common device, RGB, keymap, and advanced driver commands.
   App-launched helper commands use `GMK67_RESOURCES_DIR` to load bundled vendor
@@ -75,6 +104,9 @@ Current driver status:
   export/apply/delete named profiles through the Keyboard Profile panel.
 - `gmk67 protocol-candidates` is a read-only report of proven RGB opcodes and
   unproven lighting/profile opcode families identified in `DeviceDriver.exe`.
+- `gmk67 windows-features` is a read-only implementation-status inventory
+  derived from the extracted Windows language resources, SQLite table strings,
+  and disassembly notes.
 - `gmk67 validation-plan` is a read-only physical test checklist for the next
   permission-granted validation session. It prints exact commands, rollback
   steps, and expected evidence without opening HID.
@@ -179,6 +211,15 @@ Keymap candidates:
   `04 F0`.
 - Another short operation near `0x41db30` sends `04 18`, `04 13`, a single
   command payload, then `04 02` and `04 F0`.
+- A related helper at `0x41E050` uses the same `04 13` sequence, sets payload
+  byte 0 to `80`, bytes 9...10 to `0F 0F`, and writes the same `AA 55` marker at
+  payload offsets `0x0E...0x0F`.
+- A keyboard/settings payload path at `0x426FB0` sends `04 18`, then `04 17`
+  with byte 2 set from the Windows profile/current slot byte and byte 8 set to
+  `01`, writes one 64-byte payload, places `AA 55` at payload offsets
+  `0x3E...0x3F`, then commits with `04 02`. The payload appears to collect
+  several local UI booleans and a string length, but the individual flag
+  meanings are not proven.
 - `gmk67 keymap-dry-run` builds and prints the candidate simple-remap feature
   sequence without opening the HID device or sending reports. This is for
   protocol validation only until a safe keymap readback/restore path is known.
@@ -219,11 +260,36 @@ Keymap candidates:
   readback/backup path equivalent to RGB. Do not send candidate keymap writes
   casually; use the guarded write commands only for explicit physical tests.
 
+Macro firmware candidate:
+
+- A Windows path near `DeviceDriver.exe` VA `0x42042E` sends `04 19`, builds a
+  variable-length macro table, sends `04 15` with byte 8 set to the table chunk
+  count, sends that many 64-byte table reports, places `AA 55` in the final two
+  table bytes, then commits with `04 02`.
+- The observed empty/minimum path starts its working length at `0x190` and
+  produces an eight-chunk transfer. `gmk67 macro-firmware-template` models this
+  as a zeroed container with selector byte 8 set to `08` and `AA 55` at the end
+  of the eighth table report.
+- `gmk67 macro-firmware-validate` checks opcode order, selector chunk count,
+  64-byte report sizes, and final marker placement. `macro-firmware-apply`
+  validates before sending and remains guarded by `--unsafe-no-backup`.
+- This is not yet a complete macro firmware writer. The Windows table is built
+  from SQLite-backed macro/action records, but the exact per-event firmware
+  record layout still needs mapping before app-local macro JSON can be compiled
+  into board-side macro storage.
+
 Lighting/profile candidates:
 
 - A short operation at `DeviceDriver.exe` VA `0x41DB30` sends `04 18`, then
   `04 13` with byte 8 set to `01`, sends one payload containing an `AA 55`
-  marker, then finishes with `04 02` and `04 F0`.
+  marker, then finishes with `04 02` and `04 F0`. `gmk67 short-op-template`,
+  `short-op-validate`, and guarded `short-op-apply` now model this as a raw
+  candidate container with `empty` and `static-80` template variants.
+- A keyboard/settings operation at VA `0x426FB0` sends `04 18`, then `04 17`,
+  one settings payload, and `04 02`. `gmk67 keyboard-settings-export` accepts
+  raw payload assignments for offsets `0x00...0x3D` and reserves `0x3E...0x3F`
+  for the `AA 55` marker. `keyboard-settings-validate` checks the sequence and
+  guarded `keyboard-settings-apply` sends only validated files.
 - A custom lighting mode table path at VA `0x41DCD0` sends `04 18`, then
   `04 23` with byte 8 set to `03` or `09`, builds a per-key table with an
   `AA 55` marker, then finishes with `04 02` and `04 F0`.
@@ -272,5 +338,6 @@ Current blocker:
   permission works; continue physical-device probes from that terminal.
 
 The remaining protocol work is mapping high-level operations such as key
-remapping, RGB mode changes, per-key lighting, device-side profile save/load,
-and any true vendor factory-reset opcode to feature reports.
+remapping, RGB mode changes, per-key lighting, macro event records inside the
+now-modeled macro firmware container, device-side profile save/load, and any
+true vendor factory-reset opcode to feature reports.

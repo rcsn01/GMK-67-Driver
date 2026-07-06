@@ -29,6 +29,9 @@ func printUsage() {
       protocol-candidates
           Print proven and candidate vendor protocol command families without HID.
 
+      windows-features
+          Print the extracted Windows app feature inventory and implementation status without HID.
+
       validation-plan
           Print a read-only physical validation checklist without HID.
 
@@ -137,6 +140,15 @@ func printUsage() {
 
       macro-show <path> [--json]
           Show a macro profile, optionally as raw JSON for app editors.
+
+      macro-firmware-template <path> [chunk-count]
+          Write a zeroed candidate 04 19 / 04 15 macro firmware table container without HID.
+
+      macro-firmware-validate <path>
+          Validate an exported candidate macro firmware table container without HID.
+
+      macro-firmware-apply <path> \(unsafeKeymapFlag) [--write-index=N]
+          UNSAFE: validate and write an exported macro firmware table container.
 
       macro-library-create [--directory=path] [--slot=name] [--name=Name] [--repeat=N] <event ...>
           Create or replace a named macro in the app-local macro library.
@@ -332,6 +344,24 @@ func printUsage() {
 
       keymap-clear \(unsafeKeymapFlag) [--write-index=N]
           UNSAFE: write an empty custom-keymap table, likely clearing custom remaps.
+
+      short-op-template <path> [empty|static-80]
+          Write the candidate 04 13 short lighting/profile operation sequence without HID.
+
+      short-op-validate <path>
+          Validate an exported candidate 04 13 short operation sequence without HID.
+
+      short-op-apply <path> \(unsafeKeymapFlag) [--write-index=N]
+          UNSAFE: validate and write an exported 04 13 short operation sequence.
+
+      keyboard-settings-export <path> [--profile=byte] [offset=byte ...]
+          Write the candidate 04 17 keyboard/settings payload sequence without HID.
+
+      keyboard-settings-validate <path>
+          Validate an exported candidate 04 17 keyboard/settings payload sequence without HID.
+
+      keyboard-settings-apply <path> \(unsafeKeymapFlag) [--write-index=N]
+          UNSAFE: validate and write an exported 04 17 keyboard/settings sequence.
 
       lighting-custom-rgb-export <path> [key=rrggbb ...]
           Write the candidate 04 23 custom-lighting RGB sequence to a file without HID.

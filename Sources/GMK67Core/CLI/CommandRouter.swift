@@ -61,6 +61,13 @@ func run(_ args: [String]) throws {
         }
         printProtocolCandidates()
 
+    case "windows-features":
+        guard args.count == 2 else {
+            printUsage()
+            return
+        }
+        print(windowsFeatureInventoryText())
+
     case "validation-plan":
         guard args.count == 2 else {
             printUsage()
@@ -490,6 +497,38 @@ func run(_ args: [String]) throws {
         } else {
             printMacroProfile(macro)
         }
+
+    case "macro-firmware-template":
+        guard args.count == 3 || args.count == 4 else {
+            printUsage()
+            return
+        }
+        let chunkCount: Int
+        if args.count == 4 {
+            guard let parsed = Int(args[3]) else {
+                throw DriverError.invalidArgument("Macro firmware chunk count must be a decimal integer.")
+            }
+            chunkCount = parsed
+        } else {
+            chunkCount = defaultMacroFirmwareChunkCount
+        }
+        let sequence = try macroFirmwareTemplateFeatureSequence(chunkCount: chunkCount)
+        try writeFeatureSequenceFile(sequence, path: args[2])
+        print("Saved \(sequence.count) candidate macro firmware feature reports to \(args[2]). No HID device was opened.")
+        print("This models the Windows 04 19 / 04 15 macro-table container with \(chunkCount) table chunks and an AA 55 marker.")
+        print("It is a zeroed template for captured/raw firmware tables; app-local macro JSON event encoding is not proven yet.")
+
+    case "macro-firmware-validate":
+        guard args.count == 3 else {
+            printUsage()
+            return
+        }
+        _ = try validateMacroFirmwareFeatureSequenceFile(args[2])
+
+    case "macro-firmware-apply":
+        let options = try parseUnsafeCandidateFileOptions(Array(args.dropFirst(2)), kind: "macro firmware")
+        let sequence = try validateMacroFirmwareFeatureSequenceFile(options.path)
+        try sendUnsafeCandidateFeatureSequence(sequence, writeIndex: options.writeIndex, kind: "macro firmware")
 
     case "macro-library-create":
         var arguments = Array(args.dropFirst(2))
@@ -1066,6 +1105,67 @@ func run(_ args: [String]) throws {
         print(String(format: "Writing on scanned interface %d using %d feature reports...", options.writeIndex, sequence.count))
         try sendFeatureSequence(driver: driver, device: device, payloads: sequence)
         print("Candidate empty keymap sequence sent.")
+
+    case "short-op-template":
+        guard args.count == 3 || args.count == 4 else {
+            printUsage()
+            return
+        }
+        let variant = args.count == 4 ? args[3] : "empty"
+        let sequence = try shortOperationTemplateFeatureSequence(variant: variant)
+        try writeFeatureSequenceFile(sequence, path: args[2])
+        print("Saved \(sequence.count) candidate short-op feature reports to \(args[2]). No HID device was opened.")
+        print("This models the Windows 04 18 / 04 13 / payload / 04 02 / 04 F0 sequence with template variant \(variant).")
+        print("Known variants: empty, static-80. Live apply is guarded by \(unsafeKeymapFlag).")
+
+    case "short-op-validate":
+        guard args.count == 3 else {
+            printUsage()
+            return
+        }
+        _ = try validateShortOperationFeatureSequenceFile(args[2])
+
+    case "short-op-apply":
+        let options = try parseUnsafeCandidateFileOptions(Array(args.dropFirst(2)), kind: "short-op")
+        let sequence = try validateShortOperationFeatureSequenceFile(options.path)
+        try sendUnsafeCandidateFeatureSequence(sequence, writeIndex: options.writeIndex, kind: "short-op")
+
+    case "keyboard-settings-export":
+        guard args.count >= 3 else {
+            printUsage()
+            return
+        }
+        let path = args[2]
+        var profile: UInt8 = 0
+        var specs: [String] = []
+        for argument in args.dropFirst(3) {
+            if argument.hasPrefix("--profile=") {
+                profile = try parseOneByteLiteral(String(argument.dropFirst("--profile=".count)), field: "keyboard-settings profile")
+            } else {
+                specs.append(argument)
+            }
+        }
+        let assignments = try parseRawByteAssignmentSpecs(specs, maxOffset: 0x3D, kind: "keyboard-settings")
+        let sequence = try keyboardSettingsFeatureSequence(profile: profile, payload: try keyboardSettingsPayload(assignments: assignments))
+        try writeFeatureSequenceFile(sequence, path: path)
+        print("Saved \(sequence.count) candidate keyboard-settings feature reports to \(path). No HID device was opened.")
+        print("This models the Windows 04 18 / 04 17 / payload / 04 02 sequence with profile byte 0x\(String(format: "%02X", profile)).")
+        print("Writable payload bytes are offsets 0x00...0x3D; offsets 0x3E...0x3F contain the AA 55 marker.")
+        for assignment in assignments {
+            print(String(format: "  %@ = %02X", assignment.label, assignment.value))
+        }
+
+    case "keyboard-settings-validate":
+        guard args.count == 3 else {
+            printUsage()
+            return
+        }
+        _ = try validateKeyboardSettingsFeatureSequenceFile(args[2])
+
+    case "keyboard-settings-apply":
+        let options = try parseUnsafeCandidateFileOptions(Array(args.dropFirst(2)), kind: "keyboard settings")
+        let sequence = try validateKeyboardSettingsFeatureSequenceFile(options.path)
+        try sendUnsafeCandidateFeatureSequence(sequence, writeIndex: options.writeIndex, kind: "keyboard settings")
 
     case "lighting-custom-rgb-export":
         guard args.count >= 3 else {

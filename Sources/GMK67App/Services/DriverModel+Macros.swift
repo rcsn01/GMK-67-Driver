@@ -226,6 +226,46 @@ extension DriverModel {
         }
     }
 
+    func exportMacroFirmwareTemplate() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "macro-firmware-template.hex"
+        panel.allowedContentTypes = []
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                self.run(["macro-firmware-template", url.path], title: "Export macro firmware template")
+            }
+        }
+    }
+
+    func validateMacroFirmwareTemplate() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                self.run(["macro-firmware-validate", url.path], title: "Validate macro firmware template")
+            }
+        }
+    }
+
+    func applyMacroFirmwareTemplate() {
+        guard unsafeKeymapWrites else {
+            append("Enable unsafe candidate writes before applying a macro firmware sequence. Macro firmware readback/backup is not proven yet.")
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                self.runLiveHID(["macro-firmware-apply", url.path, "--unsafe-no-backup"], title: "Apply macro firmware template")
+            }
+        }
+    }
+
     private func loadMacroIntoControls(_ macro: AppMacroProfile) {
         macroName = macro.name
         macroRepeatCount = String(macro.repeatCount)

@@ -24,6 +24,9 @@ struct DeveloperToolsPanel: View {
                 CommandButton("Protocol", systemImage: "doc.text.magnifyingglass") {
                     model.run(["protocol-candidates"], title: "Protocol candidates")
                 }
+                CommandButton("Windows Features", systemImage: "list.clipboard") {
+                    model.run(["windows-features"], title: "Windows feature inventory")
+                }
                 CommandButton("Test Plan", systemImage: "checklist") {
                     model.run(["validation-plan"], title: "Physical validation plan")
                 }
