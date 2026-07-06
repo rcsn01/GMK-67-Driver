@@ -10,8 +10,14 @@ extension DriverModel {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             let specs = splitCommandLine(self.lightingSpecs)
+            let brightness = Int(self.lightingBrightnessPercent.rounded())
             Task { @MainActor in
-                self.run(["lighting-custom-rgb-export", url.path] + specs, title: "Export custom lighting RGB profile")
+                var command = ["lighting-custom-rgb-export", url.path]
+                if brightness != 100 {
+                    command.append("--brightness=\(brightness)%")
+                }
+                command += specs
+                self.run(command, title: "Export custom lighting RGB profile")
             }
         }
     }

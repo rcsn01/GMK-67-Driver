@@ -36,6 +36,7 @@ final class DriverModel: ObservableObject {
     @Published var keymapLibrarySlot = "wasd"
     @Published var unsafeKeymapWrites = false
     @Published var lightingSpecs = "W=FF0000 A=00FF00 S=0000FF D=00FFFF"
+    @Published var lightingBrightnessPercent = 100.0
     @Published var lightingModeSpecs = "W=01 A=02 S=03 D=04"
     @Published var lightingModePresetName = "wasd-steps"
     @Published var lightingEffectName = "breath"

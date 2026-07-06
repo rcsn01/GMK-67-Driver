@@ -13,21 +13,31 @@ struct LightingPanel: View {
     var body: some View {
         Panel("Lighting") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Custom RGB")
-                    TextField("W=FF0000 A=00FF00", text: $model.lightingSpecs)
-                        .textFieldStyle(.roundedBorder)
-                    CommandButton("Export", systemImage: "doc.badge.plus") {
-                        model.exportCustomLightingProfile()
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Custom RGB")
+                        TextField("W=FF0000 A=00FF00", text: $model.lightingSpecs)
+                            .textFieldStyle(.roundedBorder)
+                        CommandButton("Export", systemImage: "doc.badge.plus") {
+                            model.exportCustomLightingProfile()
+                        }
+                        CommandButton("Validate", systemImage: "doc.text.magnifyingglass") {
+                            model.validateCustomLightingProfile()
+                        }
+                        CommandButton("Load File", systemImage: "square.and.arrow.down.on.square") {
+                            model.loadCustomLightingProfileIntoEditor()
+                        }
+                        CommandButton("Apply", systemImage: "exclamationmark.triangle") {
+                            model.applyCustomLightingProfile()
+                        }
                     }
-                    CommandButton("Validate", systemImage: "doc.text.magnifyingglass") {
-                        model.validateCustomLightingProfile()
-                    }
-                    CommandButton("Load File", systemImage: "square.and.arrow.down.on.square") {
-                        model.loadCustomLightingProfileIntoEditor()
-                    }
-                    CommandButton("Apply", systemImage: "exclamationmark.triangle") {
-                        model.applyCustomLightingProfile()
+                    HStack {
+                        Text("Brightness")
+                        Slider(value: $model.lightingBrightnessPercent, in: 0...100, step: 1)
+                            .frame(width: 180)
+                        Text("\(Int(model.lightingBrightnessPercent.rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 42, alignment: .trailing)
                     }
                 }
 
