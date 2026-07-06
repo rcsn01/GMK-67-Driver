@@ -6,6 +6,7 @@ extension DriverModel {
         selectedVisualKey = key
         keyName = key
         sourceKey = key
+        updateSelectedVisualRGBStatus()
         if let selectedColor = visualColorHex(for: key) {
             colorHex = selectedColor
             keyColor = colorFromHex(selectedColor)

@@ -56,16 +56,18 @@ struct VisualKeyButton: View {
 
     private var keyFill: Color {
         if let colorHex {
-            return colorFromHex(colorHex).opacity(isSelected ? 0.46 : 0.30)
+            return colorFromHex(colorHex).opacity(0.34)
         }
-        return isSelected ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor)
+        return Color(nsColor: .controlBackgroundColor)
     }
 
     private var helpText: String {
         let prefix = isPressed ? "Pressed: " : ""
+        let colorText = colorHex.map { " RGB #\($0)" } ?? " RGB not loaded"
         if let remap {
-            return "\(prefix)\(key.label) (\(key.spec)) -> \(remap.target)\(remap.modifier.map { " + \($0)" } ?? "")"
+            return "\(prefix)\(key.label) (\(key.spec))\(colorText) -> \(remap.target)\(remap.modifier.map { " + \($0)" } ?? "")"
         }
-        return prefix + (key.label == key.spec ? key.spec : "\(key.label) (\(key.spec))")
+        let label = key.label == key.spec ? key.spec : "\(key.label) (\(key.spec))"
+        return prefix + label + colorText
     }
 }

@@ -131,6 +131,7 @@ extension DriverModel {
         currentRGBColorsByVisualKeyToken = colors
         currentRGBReadbackLoaded = true
         currentRGBStatus = colors.isEmpty ? "Current RGB: all off" : "Current RGB: \(colors.count) visible lit key(s)"
+        updateSelectedVisualRGBStatus()
         if let selectedColor = visualColorHex(for: selectedVisualKey) {
             colorHex = selectedColor
             keyColor = colorFromHex(selectedColor)
@@ -152,6 +153,18 @@ extension DriverModel {
             colors[specKeyToken(key)] = record.rgbHex
         }
         return colors
+    }
+
+    func updateSelectedVisualRGBStatus() {
+        guard currentRGBReadbackLoaded else {
+            selectedVisualRGBStatus = "Selected RGB: not loaded"
+            return
+        }
+        if let color = visualColorHex(for: selectedVisualKey) {
+            selectedVisualRGBStatus = "\(selectedVisualKey) #\(color)"
+        } else {
+            selectedVisualRGBStatus = "\(selectedVisualKey): no live RGB"
+        }
     }
 
     private func rgbSpecs(from readback: [AppRGBLightReadback]) -> [String] {
