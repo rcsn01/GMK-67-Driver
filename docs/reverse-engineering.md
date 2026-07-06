@@ -302,8 +302,15 @@ Lighting/profile candidates:
   same Windows chunk wrapper, and places `AA 55` at table offset `0x23E`.
   The wrapper sends nine 64-byte table reports, so the marker lands in bytes
   62...63 of the ninth table report. `gmk67 lighting-custom-rgb-export` and
-  `lighting-custom-rgb-validate` now model this path offline. `lighting-custom-rgb-apply`
-  validates the file first and remains guarded by `--unsafe-no-backup`.
+  `lighting-custom-rgb-validate` now model this path offline.
+  `lighting-custom-rgb-export --brightness=N|PCT%` models the Windows brightness
+  behavior observed in the `04 20` static RGB writer at `0x4184F0...0x4187CB`:
+  the driver scales each RGB channel as `(channel * scale) >> 8` before sending
+  the table, rather than sending a separate brightness command. The MUI UI calls
+  for `SetSpeed` (`0x5487E4`) and `SetBrightNess` (`0x5487A8`) update the local
+  custom-light controls/SQLite-backed state; only brightness was found to feed a
+  HID table, as pre-send RGB scaling. `lighting-custom-rgb-apply` validates the
+  file first and remains guarded by `--unsafe-no-backup`.
 - The shorter branch of `04 23` sets selector byte 8 to `03`, declares a
   `0x100`-byte table, and places `AA 55` at table offset `0xBE`. The wrapper
   sends three 64-byte table reports. `gmk67 lighting-mode-export` and

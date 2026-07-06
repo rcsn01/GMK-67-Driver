@@ -353,6 +353,34 @@ func parseOneByteLiteral(_ argument: String, field: String) throws -> UInt8 {
     return bytes[0]
 }
 
+func parseWindowsBrightnessScale(_ argument: String) throws -> Int {
+    let trimmed = argument.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw DriverError.invalidArgument("Brightness scale must not be empty.")
+    }
+
+    if trimmed.hasSuffix("%") {
+        let percentText = String(trimmed.dropLast())
+        guard let percent = Double(percentText), percent >= 0, percent <= 100 else {
+            throw DriverError.invalidArgument("Brightness percentage must be from 0% to 100%: \(argument)")
+        }
+        return Int((percent * 256.0 / 100.0).rounded())
+    }
+
+    let lowercased = trimmed.lowercased()
+    let radix = lowercased.hasPrefix("0x") ? 16 : 10
+    let digits = lowercased.hasPrefix("0x") ? String(lowercased.dropFirst(2)) : lowercased
+    guard let value = Int(digits, radix: radix), value >= 0, value <= 0x100 else {
+        throw DriverError.invalidArgument("Brightness scale must be 0...256, 0x00...0x100, or a percentage: \(argument)")
+    }
+    return value
+}
+
+func windowsBrightnessScaledChannel(_ channel: UInt8, brightnessScale: Int) -> UInt8 {
+    let scaled = (Int(channel) * brightnessScale) >> 8
+    return UInt8(max(0, min(255, scaled)))
+}
+
 func parseRawByteAssignmentSpec(_ spec: String, maxOffset: Int, kind: String) throws -> ByteAssignment {
     let assignment = spec.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
     guard assignment.count == 2, !assignment[0].isEmpty, !assignment[1].isEmpty else {
@@ -687,19 +715,24 @@ func alternateFullTableFeatureSequence(table: [UInt8]) -> [[UInt8]] {
     return [begin, select] + windowsChunkedFeaturePayloads(table, declaredLength: 0x2AC) + [commit, finish]
 }
 
-func customLightingRGBTable(assignments: [RGBAssignment]) throws -> [UInt8] {
+func customLightingRGBTable(assignments: [RGBAssignment], brightnessScale: Int = 0x100) throws -> [UInt8] {
+    guard brightnessScale >= 0, brightnessScale <= 0x100 else {
+        throw DriverError.invalidArgument("Brightness scale must be 0...256.")
+    }
     // 04 23 extended/custom-RGB path from DeviceDriver.exe declares 0x280 bytes.
     // The Windows chunk wrapper sends nine 64-byte chunks; AA 55 lands at 0x23E.
+    // Its table builder applies brightness before HID as (channel * scale) >> 8.
     var table = [UInt8](repeating: 0, count: 0x280)
     for assignment in assignments {
         let offset = assignment.lightIndex * 4
         guard offset + 3 < 0x23E else {
             throw DriverError.invalidArgument("Light index 0x\(String(format: "%02X", assignment.lightIndex)) is outside the custom-lighting RGB table range.")
         }
+        let color = assignment.color.map { windowsBrightnessScaledChannel($0, brightnessScale: brightnessScale) }
         table[offset] = UInt8(assignment.lightIndex)
-        table[offset + 1] = assignment.color[0]
-        table[offset + 2] = assignment.color[1]
-        table[offset + 3] = assignment.color[2]
+        table[offset + 1] = color[0]
+        table[offset + 2] = color[1]
+        table[offset + 3] = color[2]
     }
     table[0x23E] = 0xAA
     table[0x23F] = 0x55
@@ -1841,6 +1874,8 @@ func runSelfTest(verbose: Bool = true) throws {
     try assertSelfTest(lightingTable.count == 0x280, "custom lighting RGB table length")
     try assertSelfTest(Array(lightingTable[0x09C..<0x0A0]) == [0x27, 0xFF, 0x00, 0x00], "custom lighting W RGB record")
     try assertSelfTest(Array(lightingTable[0x23E..<0x240]) == [0xAA, 0x55], "custom lighting marker")
+    let dimmedLightingTable = try customLightingRGBTable(assignments: profileAssignments, brightnessScale: 0x80)
+    try assertSelfTest(Array(dimmedLightingTable[0x09C..<0x0A0]) == [0x27, 0x7F, 0x00, 0x00], "custom lighting Windows brightness scaling")
     let lightingSequence = customLightingRGBFeatureSequence(table: lightingTable)
     try assertSelfTest(lightingSequence.count == 13, "custom lighting sequence report count")
     try assertSelfTest(Array(lightingSequence[0].prefix(2)) == [0x04, 0x18], "custom lighting begin report")
@@ -2143,7 +2178,7 @@ func windowsFeatureInventoryText() -> String {
       - Custom key remapping via 04 18 / 04 11 table sequence.
       - Alternate full table via 04 18 / 04 27 table sequence.
       - Keyboard/settings payload via 04 18 / 04 17 / payload / 04 02, including named gamemode, Alt-Tab, Alt-F4, Win-key, Fn-switch, and sleep-light fields.
-      - Custom lighting RGB via 04 18 / 04 23 selector 09 table sequence.
+      - Custom lighting RGB via 04 18 / 04 23 selector 09 table sequence, including Windows-style brightness scaling before table write.
       - Per-key lighting-mode/effect table via 04 18 / 04 23 selector 03.
       - Short lighting/profile operation via 04 18 / 04 13 / payload / 04 02 / 04 F0.
       - Macro firmware table container via 04 19 / 04 15 / 04 02 template and validator.
@@ -2151,7 +2186,7 @@ func windowsFeatureInventoryText() -> String {
     Windows UI feature groups not fully mapped to safe live firmware writes yet:
       - Board-side macro event encoding/readback.
       - High-level animated effect selection beyond candidate selector-03 tables.
-      - Brightness, speed, and direction opcodes beyond the currently modeled RGB/lighting tables.
+      - Speed and direction controls beyond the currently modeled RGB/lighting tables; no standalone brightness opcode has been found.
       - Open program, open website, send text, switch configuration, and multi-key action records.
       - Device-side profile save/load/readback and true vendor factory reset opcode.
       - Mouse-only panels from the shared driver shell: DPI, report rate, wheel speed, and pointer settings.
@@ -2159,8 +2194,10 @@ func windowsFeatureInventoryText() -> String {
     Persistence finding:
       The Windows static RGB write path observed at VA 0x418500 and 0x425E03 sends 04 20,
       writes table chunks, then sends 04 02. No separate RGB save-to-flash opcode has been
-      proven on that path. The Windows profile persistence visible in strings is primarily
-      local SQLite state; firmware persistence still needs physical reboot validation.
+      proven on that path. Brightness in the Windows custom-lighting path is folded into RGB
+      bytes before table write, not sent as a separate command. The Windows profile persistence
+      visible in strings is primarily local SQLite state; firmware persistence still needs
+      physical reboot validation.
     """
 }
 
@@ -2209,7 +2246,7 @@ func protocolCandidatesText() -> String {
         table:   selector 03 declares 0x100 bytes; AA 55 marker at table offset 0xBE
         commit:  04 02
         finish:  04 F0
-        status:  selector 03 export/validate and Windows-named effect artifacts implemented; live writes guarded
+        status:  selector 03 export/validate and Windows-named effect artifacts implemented; selector 09 RGB export models Windows brightness scaling with (channel * scale) >> 8; live writes guarded
 
       Macro firmware table container
         begin:   04 19

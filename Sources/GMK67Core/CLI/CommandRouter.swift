@@ -1174,21 +1174,34 @@ func run(_ args: [String]) throws {
             return
         }
         let path = args[2]
+        var brightnessScale = 0x100
+        var specs: [String] = []
+        for argument in args.dropFirst(3) {
+            if argument.hasPrefix("--brightness=") {
+                brightnessScale = try parseWindowsBrightnessScale(String(argument.dropFirst("--brightness=".count)))
+            } else {
+                specs.append(argument)
+            }
+        }
         let keyMap = keyMapByLightIndex()
-        let assignments = args.count > 3 ? try parseRGBAssignmentSpecs(Array(args.dropFirst(3)), keyMap: keyMap) : []
-        let table = try customLightingRGBTable(assignments: assignments)
+        let assignments = try parseRGBAssignmentSpecs(specs, keyMap: keyMap)
+        let table = try customLightingRGBTable(assignments: assignments, brightnessScale: brightnessScale)
         let sequence = customLightingRGBFeatureSequence(table: table)
         try writeFeatureSequenceFile(sequence, path: path)
         print("Saved \(sequence.count) candidate custom-lighting RGB feature reports to \(path). No HID device was opened.")
         print("This is an offline artifact for the 04 23 extended/custom-RGB path. Live apply is guarded by \(unsafeKeymapFlag).")
+        if brightnessScale != 0x100 {
+            print("Applied Windows brightness scaling before export: \(brightnessScale)/256.")
+        }
         for assignment in assignments {
+            let offset = assignment.lightIndex * 4
             print(String(
                 format: "  %@ (0x%02X) = %02X %02X %02X",
                 assignment.label,
                 assignment.lightIndex,
-                assignment.color[0],
-                assignment.color[1],
-                assignment.color[2]
+                table[offset + 1],
+                table[offset + 2],
+                table[offset + 3]
             ))
         }
 

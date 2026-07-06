@@ -365,8 +365,10 @@ func printUsage() {
       keyboard-settings-apply <path> \(unsafeKeymapFlag) [--write-index=N]
           UNSAFE: validate and write an exported 04 17 keyboard/settings sequence.
 
-      lighting-custom-rgb-export <path> [key=rrggbb ...]
+      lighting-custom-rgb-export <path> [--brightness=N|PCT%] [key=rrggbb ...]
           Write the candidate 04 23 custom-lighting RGB sequence to a file without HID.
+          Brightness is applied like Windows before export: (channel * scale) >> 8,
+          where N is 0...256 and 100% maps to 256.
 
       lighting-custom-rgb-validate <path> [--json]
           Validate an exported candidate custom-lighting RGB sequence without HID.
