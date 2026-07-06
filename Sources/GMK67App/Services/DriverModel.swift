@@ -51,6 +51,7 @@ final class DriverModel: ObservableObject {
     @Published var advancedCommand = "doctor"
     @Published var selectedVisualKey = "W"
     @Published var currentRGBColorsByVisualKeyToken: [String: String] = [:]
+    @Published var currentRawRGBColorsByVisualKeyToken: [String: String] = [:]
     @Published var currentRGBReadbackLoaded = false
     @Published var currentRGBStatus = "Waiting for hardware RGB readback"
     @Published var selectedVisualRGBStatus = "Selected RGB: not loaded"
@@ -254,6 +255,7 @@ extension DriverModel {
 
     func clearCurrentRGBReadback(status: String) {
         currentRGBColorsByVisualKeyToken = [:]
+        currentRawRGBColorsByVisualKeyToken = [:]
         currentRGBReadbackLoaded = false
         currentRGBStatus = status
         selectedVisualRGBStatus = "Selected RGB: not loaded"

@@ -128,9 +128,10 @@ extension DriverModel {
 
     func loadRGBReadbackIntoCurrentPreview(_ readback: [AppRGBLightReadback], announce: Bool) {
         let colors = visualRGBColors(from: readback)
-        currentRGBColorsByVisualKeyToken = colors
+        currentRGBColorsByVisualKeyToken = colors.display
+        currentRawRGBColorsByVisualKeyToken = colors.raw
         currentRGBReadbackLoaded = true
-        currentRGBStatus = colors.isEmpty ? "Current RGB: all off" : "Current RGB: \(colors.count) visible lit key(s)"
+        currentRGBStatus = colors.display.isEmpty ? "Current RGB: all off" : "Current RGB: \(colors.display.count) visible lit key(s)"
         updateSelectedVisualRGBStatus()
         if let selectedColor = visualColorHex(for: selectedVisualKey) {
             colorHex = selectedColor
@@ -140,19 +141,22 @@ extension DriverModel {
             keyColor = .black
         }
         if announce {
-            append(colors.isEmpty ? "Synced current RGB: all physical keys are off." : "Synced current RGB for \(colors.count) visible key(s).")
+            append(colors.display.isEmpty ? "Synced current RGB: all physical keys are off." : "Synced current RGB for \(colors.display.count) visible key(s).")
         }
     }
 
-    private func visualRGBColors(from readback: [AppRGBLightReadback]) -> [String: String] {
-        var colors: [String: String] = [:]
+    private func visualRGBColors(from readback: [AppRGBLightReadback]) -> (display: [String: String], raw: [String: String]) {
+        var display: [String: String] = [:]
+        var raw: [String: String] = [:]
         for record in readback where record.isLit {
             guard let key = visualKeySpec(forLightIndex: record.lightIndex, keyName: record.keyName) else {
                 continue
             }
-            colors[specKeyToken(key)] = record.rgbHex
+            let token = specKeyToken(key)
+            raw[token] = record.rgbHex
+            display[token] = displayRGBHex(fromHardwareReadback: record.rgbHex) ?? record.rgbHex
         }
-        return colors
+        return (display, raw)
     }
 
     func updateSelectedVisualRGBStatus() {
@@ -160,8 +164,13 @@ extension DriverModel {
             selectedVisualRGBStatus = "Selected RGB: not loaded"
             return
         }
-        if let color = visualColorHex(for: selectedVisualKey) {
-            selectedVisualRGBStatus = "\(selectedVisualKey) #\(color)"
+        let token = specKeyToken(selectedVisualKey)
+        if let color = currentRGBColorsByVisualKeyToken[token] {
+            if let rawColor = currentRawRGBColorsByVisualKeyToken[token], rawColor != color {
+                selectedVisualRGBStatus = "\(selectedVisualKey) #\(color) raw #\(rawColor)"
+            } else {
+                selectedVisualRGBStatus = "\(selectedVisualKey) #\(color)"
+            }
         } else {
             selectedVisualRGBStatus = "\(selectedVisualKey): no live RGB"
         }
