@@ -1408,6 +1408,44 @@ func runSelfTest(verbose: Bool = true) throws {
         0x3A, 0x00, 0xFF, 0xFF
     ], "A/S/D RGB records")
 
+    var slotIndexedReadbackFrames = sampleRGBFrames()
+    slotIndexedReadbackFrames[2][28] = 0x00
+    slotIndexedReadbackFrames[2][29] = 0x12
+    slotIndexedReadbackFrames[2][30] = 0x34
+    slotIndexedReadbackFrames[2][31] = 0x56
+    let directSlotIndexedReadback = rgbLightReadbackRecords(slotIndexedReadbackFrames, keyByLightIndex: keyMap)
+    try assertSelfTest(
+        directSlotIndexedReadback.contains { $0.lightIndex == 0x27 && $0.keyName == "W" && $0.rgbHex == "123456" },
+        "direct RGB readback uses table slot index"
+    )
+    let slotIndexedReadback = rgbRecordJSON(slotIndexedReadbackFrames, keyByLightIndex: keyMap)
+    try assertSelfTest(
+        slotIndexedReadback.contains { $0.index == 0x27 && $0.key == "W" && $0.spec == "W" && $0.rgb == "123456" },
+        "RGB readback uses table slot index"
+    )
+
+    var aliasReadbackFrames = sampleRGBFrames()
+    aliasReadbackFrames[1][60] = 0x00
+    aliasReadbackFrames[1][61] = 0x04
+    aliasReadbackFrames[1][62] = 0x05
+    aliasReadbackFrames[1][63] = 0x06
+    let aliasReadback = rgbRecordJSON(aliasReadbackFrames, keyByLightIndex: keyMap)
+    try assertSelfTest(
+        aliasReadback.contains { $0.index == 0x1F && $0.key == "=" && $0.spec == "equal" && $0.rgb == "040506" },
+        "RGB readback exposes parseable key spec aliases"
+    )
+
+    var duplicateLabelReadbackFrames = sampleRGBFrames()
+    duplicateLabelReadbackFrames[5][16] = 0x00
+    duplicateLabelReadbackFrames[5][17] = 0x01
+    duplicateLabelReadbackFrames[5][18] = 0x02
+    duplicateLabelReadbackFrames[5][19] = 0x03
+    let duplicateLabelReadback = rgbRecordJSON(duplicateLabelReadbackFrames, keyByLightIndex: keyMap)
+    try assertSelfTest(
+        duplicateLabelReadback.contains { $0.index == 0x54 && $0.key == "shift" && $0.spec == "0x54" && $0.rgb == "010203" },
+        "RGB readback disambiguates duplicate key labels"
+    )
+
     let tempDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("gmk67-self-test-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)

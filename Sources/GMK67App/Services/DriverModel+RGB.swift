@@ -67,10 +67,10 @@ extension DriverModel {
         }
         Task { @MainActor in
             do {
-                let records = try await readCurrentRGBRecordsForUserAction()
-                loadRGBRecordsIntoEditor(records)
-                loadRGBRecordsIntoCurrentPreview(records, announce: false)
-                append("Loaded \(records.count) current RGB record(s) into the editor.")
+                let readback = try await readCurrentRGBReadbackForUserAction()
+                loadRGBReadbackIntoEditor(readback)
+                loadRGBReadbackIntoCurrentPreview(readback, announce: false)
+                append("Loaded \(readback.count) current RGB key color(s) into the editor.")
             } catch {
                 clearCurrentRGBReadback(status: "Current RGB read failed")
                 append("Could not read current RGB from keyboard: \(error)")
@@ -120,11 +120,17 @@ extension DriverModel {
         combinedProfileIncludesRGBMap = !specs.isEmpty
     }
 
-    func loadRGBRecordsIntoCurrentPreview(_ records: [AppRGBRecord], announce: Bool) {
-        let specs = rgbSpecs(from: records)
-        currentRGBSpecs = specs.joined(separator: " ")
+    func loadRGBReadbackIntoEditor(_ readback: [AppRGBLightReadback]) {
+        let specs = rgbSpecs(from: readback)
+        mapSpecs = specs.joined(separator: " ")
+        combinedProfileIncludesRGBMap = !specs.isEmpty
+    }
+
+    func loadRGBReadbackIntoCurrentPreview(_ readback: [AppRGBLightReadback], announce: Bool) {
+        let colors = visualRGBColors(from: readback)
+        currentRGBColorsByVisualKeyToken = colors
         currentRGBReadbackLoaded = true
-        currentRGBStatus = specs.isEmpty ? "Current RGB: all off" : "Current RGB: \(specs.count) lit key(s)"
+        currentRGBStatus = colors.isEmpty ? "Current RGB: all off" : "Current RGB: \(colors.count) visible lit key(s)"
         if let selectedColor = visualColorHex(for: selectedVisualKey) {
             colorHex = selectedColor
             keyColor = colorFromHex(selectedColor)
@@ -133,16 +139,33 @@ extension DriverModel {
             keyColor = .black
         }
         if announce {
-            append(specs.isEmpty ? "Synced current RGB: all physical keys are off." : "Synced current RGB for \(specs.count) visible key(s).")
+            append(colors.isEmpty ? "Synced current RGB: all physical keys are off." : "Synced current RGB for \(colors.count) visible key(s).")
+        }
+    }
+
+    private func visualRGBColors(from readback: [AppRGBLightReadback]) -> [String: String] {
+        var colors: [String: String] = [:]
+        for record in readback where record.isLit {
+            guard let key = visualKeySpec(forLightIndex: record.lightIndex, keyName: record.keyName) else {
+                continue
+            }
+            colors[specKeyToken(key)] = record.rgbHex
+        }
+        return colors
+    }
+
+    private func rgbSpecs(from readback: [AppRGBLightReadback]) -> [String] {
+        readback.compactMap { record -> String? in
+            guard record.isLit, let key = visualKeySpec(forLightIndex: record.lightIndex, keyName: record.keyName) else {
+                return nil
+            }
+            return "\(key)=\(record.rgbHex)"
         }
     }
 
     private func rgbSpecs(from records: [AppRGBRecord]) -> [String] {
         records.compactMap { record -> String? in
-            guard
-                let key = record.key?.trimmingCharacters(in: .whitespacesAndNewlines),
-                !key.isEmpty
-            else {
+            guard let key = rgbSpecTarget(for: record) else {
                 return nil
             }
             let rgb = record.rgb.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -153,6 +176,22 @@ extension DriverModel {
             }
             return "\(key)=\(rgb)"
         }
+    }
+
+    private func rgbSpecTarget(for record: AppRGBRecord) -> String? {
+        if let spec = record.spec?.trimmingCharacters(in: .whitespacesAndNewlines), !spec.isEmpty {
+            return spec
+        }
+
+        guard let key = record.key?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty else {
+            return nil
+        }
+
+        let token = specKeyToken(key)
+        if token == "shift" || token == "alt" {
+            return String(format: "0x%02X", record.index)
+        }
+        return visualKeySpec(forInputName: key) ?? key
     }
 
     func listRGBBackups() {

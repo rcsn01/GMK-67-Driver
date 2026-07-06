@@ -83,6 +83,7 @@ struct AppMacroEvent: Codable {
 }
 
 typealias AppRGBRecord = RGBRecord
+typealias AppRGBLightReadback = RGBLightReadback
 
 struct AppKeymapRecord: Codable {
     let offset: Int

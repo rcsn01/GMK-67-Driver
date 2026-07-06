@@ -50,7 +50,7 @@ final class DriverModel: ObservableObject {
     @Published var macroLibrarySlot = "combo"
     @Published var advancedCommand = "doctor"
     @Published var selectedVisualKey = "W"
-    @Published var currentRGBSpecs = ""
+    @Published var currentRGBColorsByVisualKeyToken: [String: String] = [:]
     @Published var currentRGBReadbackLoaded = false
     @Published var currentRGBStatus = "Waiting for hardware RGB readback"
     @Published var pressedVisualKeys: Set<String> = []
@@ -196,7 +196,7 @@ final class DriverModel: ObservableObject {
 
     func visualColorHex(for key: String) -> String? {
         guard currentRGBReadbackLoaded else { return nil }
-        return colorForKey(key, in: currentRGBSpecs)
+        return currentRGBColorsByVisualKeyToken[specKeyToken(key)]
     }
 
     func isVisualKeyPressed(_ key: String) -> Bool {
@@ -252,7 +252,7 @@ extension DriverModel {
     }
 
     func clearCurrentRGBReadback(status: String) {
-        currentRGBSpecs = ""
+        currentRGBColorsByVisualKeyToken = [:]
         currentRGBReadbackLoaded = false
         currentRGBStatus = status
     }
@@ -263,19 +263,19 @@ extension DriverModel {
         }
     }
 
-    func readCurrentRGBRecordsForApp() async throws -> [RGBRecord] {
+    func readCurrentRGBReadbackForApp() async throws -> [RGBLightReadback] {
         try await Task.detached(priority: .utility) {
-            try readCurrentRGBRecords(writeIndex: 0, readIndex: 0, chunks: 9)
+            try readCurrentRGBReadback(writeIndex: 0, readIndex: 0, chunks: 9)
         }.value
     }
 
-    func readCurrentRGBRecordsForUserAction() async throws -> [RGBRecord] {
+    func readCurrentRGBReadbackForUserAction() async throws -> [RGBLightReadback] {
         while isLiveRGBReadInFlight {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         isLiveRGBReadInFlight = true
         defer { isLiveRGBReadInFlight = false }
-        return try await readCurrentRGBRecordsForApp()
+        return try await readCurrentRGBReadbackForApp()
     }
 
     private func startRGBPollingIfNeeded() {
@@ -336,10 +336,10 @@ extension DriverModel {
         }
 
         do {
-            let records = try await readCurrentRGBRecordsForApp()
+            let readback = try await readCurrentRGBReadbackForApp()
             isLiveRGBReadInFlight = false
             guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }
-            loadRGBRecordsIntoCurrentPreview(records, announce: announce)
+            loadRGBReadbackIntoCurrentPreview(readback, announce: announce)
         } catch {
             isLiveRGBReadInFlight = false
             guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }

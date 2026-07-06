@@ -201,18 +201,44 @@ public struct RGBRecord: Codable, Sendable {
     public let offset: Int
     public let index: Int
     public let key: String?
+    public let spec: String?
     public let rgb: String
 
-    public init(chunk: Int, offset: Int, index: Int, key: String?, rgb: String) {
+    public init(chunk: Int, offset: Int, index: Int, key: String?, spec: String? = nil, rgb: String) {
         self.chunk = chunk
         self.offset = offset
         self.index = index
         self.key = key
+        self.spec = spec
         self.rgb = rgb
     }
 }
 
 typealias RGBRecordJSON = RGBRecord
+
+public struct RGBLightReadback: Sendable {
+    public let lightIndex: Int
+    public let keyName: String?
+    public let red: UInt8
+    public let green: UInt8
+    public let blue: UInt8
+
+    public init(lightIndex: Int, keyName: String?, red: UInt8, green: UInt8, blue: UInt8) {
+        self.lightIndex = lightIndex
+        self.keyName = keyName
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    public var isLit: Bool {
+        red != 0 || green != 0 || blue != 0
+    }
+
+    public var rgbHex: String {
+        String(format: "%02X%02X%02X", red, green, blue)
+    }
+}
 
 struct KeymapRecordJSON: Codable {
     let offset: Int

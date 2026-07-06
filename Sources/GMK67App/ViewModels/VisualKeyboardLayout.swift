@@ -73,6 +73,20 @@ private let visualKeyOrderByToken: [String: Int] = {
     return order
 }()
 
+private let visualKeySpecByLightIndex: [Int: String] = [
+    0x01: "esc",
+    0x14: "1", 0x15: "2", 0x16: "3", 0x17: "4", 0x18: "5", 0x19: "6", 0x1A: "7",
+    0x1B: "8", 0x1C: "9", 0x1D: "0", 0x1E: "-", 0x1F: "equal", 0x67: "backspace",
+    0x25: "tab", 0x26: "Q", 0x27: "W", 0x28: "E", 0x29: "R", 0x2A: "T", 0x2B: "Y",
+    0x2C: "U", 0x2D: "I", 0x2E: "O", 0x2F: "P", 0x30: "[", 0x31: "]", 0x43: "\\|", 0x77: "del",
+    0x37: "Caps", 0x38: "A", 0x39: "S", 0x3A: "D", 0x3B: "F", 0x3C: "G", 0x3D: "H",
+    0x3E: "J", 0x3F: "K", 0x40: "L", 0x41: ";", 0x42: "quote", 0x55: "enter", 0x76: "pageup",
+    0x49: "0x49", 0x4A: "Z", 0x4B: "X", 0x4C: "C", 0x4D: "V", 0x4E: "B", 0x4F: "N",
+    0x50: "M", 0x51: "comma", 0x52: "period", 0x53: "slash", 0x54: "0x54", 0x65: "up", 0x79: "pagedown",
+    0x5B: "control", 0x5C: "win", 0x5D: "0x5D", 0x5E: "space", 0x5F: "0x5F", 0x60: "fn",
+    0x63: "left", 0x64: "down", 0x66: "right"
+]
+
 private let inputNameToVisualKeySpec: [String: String] = {
     let pairs = [
         ("escape", "esc"),
@@ -151,6 +165,16 @@ func visualKeySpec(forInputName name: String) -> String? {
     }
     if trimmed.count == 1, let scalar = trimmed.unicodeScalars.first, CharacterSet.letters.contains(scalar) {
         return trimmed.uppercased()
+    }
+    return nil
+}
+
+func visualKeySpec(forLightIndex lightIndex: Int, keyName: String?) -> String? {
+    if let mapped = visualKeySpecByLightIndex[lightIndex] {
+        return mapped
+    }
+    if let keyName, let mapped = visualKeySpec(forInputName: keyName) {
+        return mapped
     }
     return nil
 }

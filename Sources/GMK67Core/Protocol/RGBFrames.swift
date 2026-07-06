@@ -6,14 +6,16 @@ import IOKit.hid
 func printRGBRecords(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:], recordByteLimit: Int? = nil) {
     for record in rgbRecordJSON(chunks, keyByLightIndex: keyByLightIndex, recordByteLimit: recordByteLimit) {
         let label = record.key.map { " key=\($0)" } ?? ""
+        let specLabel = record.spec.flatMap { $0 == record.key ? nil : " spec=\($0)" } ?? ""
         let rgbBytes = try? parseHexBytes(record.rgb)
         if let rgbBytes, rgbBytes.count == 3 {
             print(String(
-                format: "  chunk=%02d offset=%02d index=0x%02X%@ rgb=%02X %02X %02X",
+                format: "  chunk=%02d offset=%02d index=0x%02X%@%@ rgb=%02X %02X %02X",
                 record.chunk,
                 record.offset,
                 record.index,
                 label,
+                specLabel,
                 rgbBytes[0],
                 rgbBytes[1],
                 rgbBytes[2]
@@ -23,33 +25,24 @@ func printRGBRecords(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:],
 }
 
 func rgbRecordJSON(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:], recordByteLimit: Int? = nil) -> [RGBRecordJSON] {
-    var records: [RGBRecordJSON] = []
-    for (chunkIndex, bytes) in chunks.enumerated() {
-        var offset = 0
-        while offset + 3 < bytes.count {
-            let tableOffset = chunkIndex * 64 + offset
-            if let recordByteLimit, tableOffset + 3 >= recordByteLimit {
-                break
-            }
-            let record = Array(bytes[offset..<(offset + 4)])
-            let index = record[0]
-            let red = record[1]
-            let green = record[2]
-            let blue = record[3]
-            if red != 0 || green != 0 || blue != 0 {
-                let key = keyByLightIndex[Int(index)]
-                records.append(RGBRecordJSON(
-                    chunk: chunkIndex,
-                    offset: offset,
-                    index: Int(index),
-                    key: key?.name,
-                    rgb: String(format: "%02X%02X%02X", red, green, blue)
-                ))
-            }
-            offset += 4
+    let duplicateTokens = duplicateKeyNameTokens(Array(keyByLightIndex.values))
+    return rgbLightReadbackRecords(chunks, keyByLightIndex: keyByLightIndex, recordByteLimit: recordByteLimit)
+        .map { record in
+            let key = keyByLightIndex[record.lightIndex]
+            let spec = keyByLightIndex.isEmpty ? nil : parseableSpecTarget(
+                for: key,
+                offset: record.lightIndex,
+                duplicateKeyTokens: duplicateTokens
+            )
+            return RGBRecordJSON(
+                chunk: record.lightIndex / 16,
+                offset: (record.lightIndex % 16) * 4,
+                index: record.lightIndex,
+                key: record.keyName,
+                spec: spec,
+                rgb: record.rgbHex
+            )
         }
-    }
-    return records
 }
 
 func printRGBRecordsJSON(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:], recordByteLimit: Int? = nil) throws {
@@ -127,10 +120,39 @@ func printByteRecordsJSON(_ chunks: [[UInt8]], byteLimit: Int, keyByLightIndex: 
 
 func rgbFramesToRecords(_ frames: [[UInt8]]) -> [Int: (red: UInt8, green: UInt8, blue: UInt8)] {
     var records: [Int: (red: UInt8, green: UInt8, blue: UInt8)] = [:]
-    for bytes in frames {
+    for (chunkIndex, bytes) in frames.enumerated() {
         var offset = 0
         while offset + 3 < bytes.count {
-            records[Int(bytes[offset])] = (bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+            let tableOffset = chunkIndex * 64 + offset
+            records[tableOffset / 4] = (bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+            offset += 4
+        }
+    }
+    return records
+}
+
+func rgbLightReadbackRecords(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:], recordByteLimit: Int? = nil) -> [RGBLightReadback] {
+    var records: [RGBLightReadback] = []
+    for (chunkIndex, bytes) in chunks.enumerated() {
+        var offset = 0
+        while offset + 3 < bytes.count {
+            let tableOffset = chunkIndex * 64 + offset
+            if let recordByteLimit, tableOffset + 3 >= recordByteLimit {
+                break
+            }
+            let lightIndex = tableOffset / 4
+            let red = bytes[offset + 1]
+            let green = bytes[offset + 2]
+            let blue = bytes[offset + 3]
+            if red != 0 || green != 0 || blue != 0 {
+                records.append(RGBLightReadback(
+                    lightIndex: lightIndex,
+                    keyName: keyByLightIndex[lightIndex]?.name,
+                    red: red,
+                    green: green,
+                    blue: blue
+                ))
+            }
             offset += 4
         }
     }
@@ -168,6 +190,23 @@ func readRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, readDevice: IOHI
 }
 
 public func readCurrentRGBRecords(writeIndex: Int = 0, readIndex: Int = 0, chunks: Int = 9) throws -> [RGBRecord] {
+    let keyMap = keyMapByLightIndex()
+    let duplicateTokens = duplicateKeyNameTokens(Array(keyMap.values))
+    return try readCurrentRGBReadback(writeIndex: writeIndex, readIndex: readIndex, chunks: chunks).map { record in
+        let key = keyMap[record.lightIndex]
+        let spec = parseableSpecTarget(for: key, offset: record.lightIndex, duplicateKeyTokens: duplicateTokens)
+        return RGBRecord(
+            chunk: record.lightIndex / 16,
+            offset: (record.lightIndex % 16) * 4,
+            index: record.lightIndex,
+            key: record.keyName,
+            spec: spec,
+            rgb: record.rgbHex
+        )
+    }
+}
+
+public func readCurrentRGBReadback(writeIndex: Int = 0, readIndex: Int = 0, chunks: Int = 9) throws -> [RGBLightReadback] {
     guard chunks > 0, chunks <= 9 else {
         throw DriverError.invalidArgument("RGB readback chunks must be between 1 and 9.")
     }
@@ -181,7 +220,7 @@ public func readCurrentRGBRecords(writeIndex: Int = 0, readIndex: Int = 0, chunk
     let writeDevice = try driver.device(at: writeIndex, configurationOnly: false)
     let readDevice = try driver.device(at: readIndex, configurationOnly: false)
     let frames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice, chunks: chunks)
-    return rgbRecordJSON(frames, keyByLightIndex: keyMapByLightIndex())
+    return rgbLightReadbackRecords(frames, keyByLightIndex: keyMapByLightIndex())
 }
 
 func writeRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
