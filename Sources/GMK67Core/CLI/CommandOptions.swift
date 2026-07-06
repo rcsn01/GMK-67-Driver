@@ -1418,6 +1418,18 @@ func runSelfTest(verbose: Bool = true) throws {
         directSlotIndexedReadback.contains { $0.lightIndex == 0x27 && $0.keyName == "W" && $0.rgbHex == "123456" },
         "direct RGB readback uses table slot index"
     )
+
+    var encodedIndexReadbackFrames = sampleRGBFrames()
+    encodedIndexReadbackFrames[0][0] = 0x27
+    encodedIndexReadbackFrames[0][1] = 0xFE
+    encodedIndexReadbackFrames[0][2] = 0xDC
+    encodedIndexReadbackFrames[0][3] = 0x00
+    let encodedIndexReadback = rgbLightReadbackRecords(encodedIndexReadbackFrames, keyByLightIndex: keyMap)
+    try assertSelfTest(
+        encodedIndexReadback.contains { $0.lightIndex == 0x27 && $0.keyName == "W" && $0.rgbHex == "FEDC00" },
+        "direct RGB readback prefers embedded light index"
+    )
+
     let slotIndexedReadback = rgbRecordJSON(slotIndexedReadbackFrames, keyByLightIndex: keyMap)
     try assertSelfTest(
         slotIndexedReadback.contains { $0.index == 0x27 && $0.key == "W" && $0.spec == "W" && $0.rgb == "123456" },

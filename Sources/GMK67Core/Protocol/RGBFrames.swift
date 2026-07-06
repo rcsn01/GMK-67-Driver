@@ -124,7 +124,10 @@ func rgbFramesToRecords(_ frames: [[UInt8]]) -> [Int: (red: UInt8, green: UInt8,
         var offset = 0
         while offset + 3 < bytes.count {
             let tableOffset = chunkIndex * 64 + offset
-            records[tableOffset / 4] = (bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+            let slotIndex = tableOffset / 4
+            let encodedIndex = Int(bytes[offset])
+            let lightIndex = encodedIndex == 0 ? slotIndex : encodedIndex
+            records[lightIndex] = (bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
             offset += 4
         }
     }
@@ -140,11 +143,23 @@ func rgbLightReadbackRecords(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem
             if let recordByteLimit, tableOffset + 3 >= recordByteLimit {
                 break
             }
-            let lightIndex = tableOffset / 4
+            let slotIndex = tableOffset / 4
+            let encodedIndex = Int(bytes[offset])
             let red = bytes[offset + 1]
             let green = bytes[offset + 2]
             let blue = bytes[offset + 3]
             if red != 0 || green != 0 || blue != 0 {
+                let lightIndex: Int
+                if keyByLightIndex.isEmpty {
+                    lightIndex = encodedIndex == 0 ? slotIndex : encodedIndex
+                } else if keyByLightIndex[encodedIndex] != nil {
+                    lightIndex = encodedIndex
+                } else if encodedIndex == 0, keyByLightIndex[slotIndex] != nil {
+                    lightIndex = slotIndex
+                } else {
+                    offset += 4
+                    continue
+                }
                 records.append(RGBLightReadback(
                     lightIndex: lightIndex,
                     keyName: keyByLightIndex[lightIndex]?.name,
