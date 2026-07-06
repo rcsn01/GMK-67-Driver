@@ -6,7 +6,7 @@ extension DriverModel {
     func refreshDeviceStatusIfNeeded() {
         guard !didAutoRefreshDeviceStatus else { return }
         didAutoRefreshDeviceStatus = true
-        refreshDeviceStatus(announce: false, openCheck: false)
+        refreshDeviceStatus(announce: false, openCheck: true)
     }
 
     func refreshDeviceStatus(announce: Bool = true, openCheck: Bool = true) {

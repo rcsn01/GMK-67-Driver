@@ -74,13 +74,13 @@ func printUsage() {
       profile-export-spec <output-prefix> [--name=Name] [--rgb=preset] [--keymap=preset|none] [--rgb-fill=rrggbb] [--remap=source=target[:modifier] ...] [key=rrggbb ...]
           Export inline profile artifacts without creating a profile JSON file.
 
-      profile-apply-spec [--name=Name] [--rgb=preset] [--keymap=preset|none] [--rgb-fill=rrggbb] [--remap=source=target[:modifier] ...] [key=rrggbb ...] [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N]
+      profile-apply-spec [--name=Name] [--rgb=preset] [--keymap=preset|none] [--rgb-fill=rrggbb] [--remap=source=target[:modifier] ...] [key=rrggbb ...] [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Apply an inline combined profile without creating a file. Keymap sections require \(unsafeKeymapFlag).
 
       profile-export <path> <output-prefix>
           Export composed profile artifacts as <prefix>-rgb.hex and optional <prefix>-keymap.hex.
 
-      profile-apply <path> [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N]
+      profile-apply <path> [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Apply a combined profile. Keymap sections require \(unsafeKeymapFlag).
 
       profile-preset-list
@@ -93,7 +93,7 @@ func printUsage() {
       profile-preset-create <path> <preset-name>
           Create a combined GMK67 profile JSON file from a built-in preset.
 
-      profile-preset-apply <preset-name> [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N]
+      profile-preset-apply <preset-name> [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Apply a built-in whole-keyboard profile preset.
 
       profile-library-create [--directory=path] [--slot=name] [--name=Name] [--rgb=preset] [--keymap=preset|none] [--rgb-fill=rrggbb] [--remap=source=target[:modifier] ...] [key=rrggbb ...]
@@ -114,7 +114,7 @@ func printUsage() {
       profile-library-export <slot> <output-prefix> [--directory=path]
           Export saved app-local profile artifacts.
 
-      profile-library-apply <slot> [--directory=path] [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N]
+      profile-library-apply <slot> [--directory=path] [\(unsafeKeymapFlag)] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Apply a saved app-local profile. Keymap sections require \(unsafeKeymapFlag).
 
       profile-library-delete <slot> [--directory=path]
@@ -204,10 +204,10 @@ func printUsage() {
       rgb-dump [write-index] [read-index] [chunks] [--json]
           Send the RGB readback request, read all chunks, and print non-zero records.
 
-      rgb-set-key <key-name-or-light-index-hex> <rrggbb-hex> [write-index] [read-index]
+      rgb-set-key <key-name-or-light-index-hex> <rrggbb-hex> [write-index] [read-index] [\(legacyRGBTableFlag)]
           Save a backup, set one key in the RGB table, then read back the rendered table.
 
-      rgb-map <key=rrggbb> [...] [--write-index=N] [--read-index=N]
+      rgb-map <key=rrggbb> [...] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Save a backup, set multiple keys in one RGB table write, then read back.
 
       rgb-file-map <input.hex> <output.hex> <key=rrggbb> [...]
@@ -219,13 +219,28 @@ func printUsage() {
       rgb-preset-list
           List built-in RGB lighting presets.
 
+      rgb-layout-list
+          List built-in RGB layout presets. Layout presets define keys, not colors.
+
+      rgb-theme-list
+          List built-in RGB color themes.
+
+      rgb-theme-show <layout-name> <theme-name> [--json]
+          Show the composed RGB preset produced by a layout and color theme.
+
+      rgb-theme-create <path> <layout-name> <theme-name>
+          Create a fresh RGB table file from a layout preset and color theme.
+
       rgb-preset-show <preset-name> [--json]
           Show a built-in RGB lighting preset without opening HID.
 
       rgb-preset-create <path> <preset-name>
           Create a fresh RGB table file from a built-in preset without opening HID.
 
-      rgb-preset-apply <preset-name> [write-index] [read-index]
+      rgb-theme-apply <layout-name> <theme-name> [write-index] [read-index] [\(legacyRGBTableFlag)]
+          Save a backup, apply a layout preset with a color theme, then read back rendered RGB.
+
+      rgb-preset-apply <preset-name> [write-index] [read-index] [\(legacyRGBTableFlag)]
           Save a backup, apply a built-in RGB preset, then read back rendered RGB.
 
       effect-list
@@ -237,16 +252,16 @@ func printUsage() {
       rgb-file-dump <path> [--json]
           Parse a saved RGB table file and print non-zero records without opening HID.
 
-      rgb-set-all <rrggbb-hex> [write-index] [read-index]
+      rgb-set-all <rrggbb-hex> [write-index] [read-index] [\(legacyRGBTableFlag)]
           Save a backup, then set all physical keys from the vendor layout to one RGB color.
 
-      rgb-clear [write-index] [read-index]
+      rgb-clear [write-index] [read-index] [\(legacyRGBTableFlag)]
           Save a backup, then set all physical keys from the vendor layout to black/off.
 
       rgb-save <path> [write-index] [read-index]
           Save the current 9-frame RGB table to a hex text file.
 
-      rgb-restore <path> [write-index] [read-index]
+      rgb-restore <path> [write-index] [read-index] [\(legacyRGBTableFlag)]
           Restore a saved RGB table file and read back the result.
 
       rgb-restore-dry-run <path>
@@ -255,8 +270,11 @@ func printUsage() {
       rgb-backups [directory]
           List valid automatic RGB backup files without opening HID.
 
-      rgb-restore-latest [--directory=path] [--write-index=N] [--read-index=N]
+      rgb-restore-latest [--directory=path] [--write-index=N] [--read-index=N] [\(legacyRGBTableFlag)]
           Restore the newest valid automatic RGB backup file and read back the result.
+
+      \(legacyRGBTableFlag)
+          Use only the older 04 20 static RGB table writer instead of the default selector-09 write plus 04 13 activation.
 
       keymap-dry-run <source-key> <target-key-or-hid-hex> [modifier-key-or-hid-hex]
           Build and print the candidate simple-remap feature sequence without sending it.

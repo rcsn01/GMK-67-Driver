@@ -236,6 +236,163 @@ let rgbPresetDefinitions: [RGBPresetDefinition] = [
     ])
 ]
 
+let rgbLayoutPresetDefinitions: [RGBLayoutPresetDefinition] = [
+    RGBLayoutPresetDefinition(
+        name: "all",
+        title: "All Keys",
+        description: "Apply the selected theme's primary color to every mapped physical key.",
+        fillRole: "primary",
+        assignments: []
+    ),
+    RGBLayoutPresetDefinition(
+        name: "wasd",
+        title: "WASD",
+        description: "Highlight WASD, arrows, Shift, and Space for games.",
+        fillRole: "base",
+        assignments: [
+            "W=primary", "A=secondary", "S=tertiary", "D=quaternary",
+            "up=primary", "left=secondary", "down=tertiary", "right=quaternary",
+            "shift=accent", "space=text"
+        ]
+    ),
+    RGBLayoutPresetDefinition(
+        name: "arrows",
+        title: "Arrows",
+        description: "Highlight arrows and the compact navigation cluster.",
+        fillRole: "base",
+        assignments: [
+            "up=text", "left=secondary", "down=tertiary", "right=quaternary",
+            "page up=accent", "page down=primary", "del=danger"
+        ]
+    ),
+    RGBLayoutPresetDefinition(
+        name: "coding",
+        title: "Coding",
+        description: "Highlight coding punctuation, modifiers, Enter, and Space.",
+        fillRole: "base",
+        assignments: [
+            "esc=danger", "tab=primary", "Caps=accent", "enter=tertiary",
+            "[=secondary", "]=secondary", ";=quaternary", "\\|=secondary",
+            "control=primary", "alt=primary", "space=text"
+        ]
+    ),
+    RGBLayoutPresetDefinition(
+        name: "rows",
+        title: "Rows",
+        description: "Apply the selected theme across keyboard rows.",
+        fillRole: "base",
+        assignments: [
+            "esc=c1", "1=c1", "2=c2", "3=c3", "4=c4", "5=c5", "6=c6", "7=c7", "8=c8", "9=c9", "0=c10", "-=c11", "equal=c12", "backspace=danger",
+            "tab=c3", "Q=c4", "W=c5", "E=c6", "R=c7", "T=c8", "Y=c9", "U=c10", "I=c11", "O=c12", "P=danger",
+            "Caps=c6", "A=c7", "S=c8", "D=c9", "F=c10", "G=c11", "H=c12", "J=danger", "K=c1", "L=c3", "enter=c5",
+            "shift=c11", "Z=c12", "X=danger", "C=c1", "V=c3", "B=c4", "N=c5", "M=c6", "up=c9",
+            "control=c10", "win=c11", "alt=c12", "space=text", "fn=c11", "left=c4", "down=c6", "right=c8"
+        ]
+    )
+]
+
+let rgbColorThemeDefinitions: [RGBColorThemeDefinition] = [
+    rgbColorThemeDefinition(name: "off", title: "Off", description: "Turn selected layout lighting off.", palette: ["000000"]),
+    rgbColorThemeDefinition(name: "white", title: "White", description: "Clean white lighting.", palette: ["FFFFFF"]),
+    rgbColorThemeDefinition(name: "red", title: "Red", description: "Solid red lighting.", palette: ["FF0000"]),
+    rgbColorThemeDefinition(name: "green", title: "Green", description: "Solid green lighting.", palette: ["00FF00"]),
+    rgbColorThemeDefinition(name: "blue", title: "Blue", description: "Solid blue lighting.", palette: ["0000FF"]),
+    rgbColorThemeDefinition(name: "purple", title: "Purple", description: "Solid purple lighting.", palette: ["8000FF"]),
+    rgbColorThemeDefinition(name: "cyan", title: "Cyan", description: "Solid cyan lighting.", palette: ["00FFFF"]),
+    rgbColorThemeDefinition(name: "orange", title: "Orange", description: "Solid orange lighting.", palette: ["FF6A00"]),
+    rgbColorThemeDefinition(name: "yellow", title: "Yellow", description: "Solid yellow lighting.", palette: ["FFFF00"]),
+    rgbColorThemeDefinition(name: "pink", title: "Pink", description: "Solid pink lighting.", palette: ["FF2D8A"]),
+    rgbColorThemeDefinition(name: "gold", title: "Gold", description: "Warm gold lighting.", palette: ["FFB000"]),
+    rgbColorThemeDefinition(
+        name: "rainbow",
+        title: "Rainbow",
+        description: "Bright multi-color theme.",
+        base: "000000",
+        palette: ["FF3B30", "FF9F0A", "FFCC00", "34C759", "00C7BE", "64D2FF", "0A84FF", "5E5CE6", "BF5AF2", "FF2D55", "FFD60A", "30D158"],
+        text: "FFFFFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "ocean",
+        title: "Ocean",
+        description: "Blue and cyan lighting.",
+        base: "001E3C",
+        palette: ["00C7BE", "64D2FF", "0A84FF", "5E5CE6"],
+        text: "BDEBFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "sunset",
+        title: "Sunset",
+        description: "Warm orange, red, and purple lighting.",
+        base: "2B1028",
+        palette: ["FF453A", "FF9F0A", "FFCC00", "BF5AF2"],
+        text: "FFD60A"
+    ),
+    rgbColorThemeDefinition(
+        name: "fire",
+        title: "Fire",
+        description: "Hot reds, oranges, and yellows.",
+        base: "3A0A00",
+        palette: ["FF3B30", "FF6A00", "FF9F0A", "FFCC00", "FFD60A"],
+        text: "FFD60A"
+    ),
+    rgbColorThemeDefinition(
+        name: "ice",
+        title: "Ice",
+        description: "Frozen blue, cyan, and white lighting.",
+        base: "021B33",
+        palette: ["64D2FF", "BDEBFF", "FFFFFF", "00C7BE"],
+        text: "FFFFFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "forest",
+        title: "Forest",
+        description: "Deep green with mossy and amber highlights.",
+        base: "05230D",
+        palette: ["34C759", "30D158", "A3E635", "FFD60A"],
+        text: "A3E635"
+    ),
+    rgbColorThemeDefinition(
+        name: "matrix",
+        title: "Matrix",
+        description: "Black base with green code tones.",
+        base: "000000",
+        palette: ["00FF41", "008F11", "003B00", "34C759"],
+        text: "00FF41"
+    ),
+    rgbColorThemeDefinition(
+        name: "aurora",
+        title: "Aurora",
+        description: "Green, teal, blue, and violet bands.",
+        base: "060B26",
+        palette: ["34C759", "30D158", "00C7BE", "64D2FF", "5E5CE6", "BF5AF2"],
+        text: "BDEBFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "cyberpunk",
+        title: "Cyberpunk",
+        description: "Neon magenta, cyan, and yellow.",
+        base: "14001F",
+        palette: ["FF2D8A", "00FFFF", "FFD60A", "BF5AF2"],
+        text: "00FFFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "pastel",
+        title: "Pastel",
+        description: "Soft mint, peach, pink, blue, and lavender.",
+        base: "2E2440",
+        palette: ["C2FFD9", "FFE0C2", "FFC2E2", "C2E5FF", "E5C2FF"],
+        text: "FFFFFF"
+    ),
+    rgbColorThemeDefinition(
+        name: "lava",
+        title: "Lava",
+        description: "Molten red with bright magma highlights.",
+        base: "2A0000",
+        palette: ["FF3B30", "FF6A00", "FFD60A", "FF9F0A"],
+        text: "FFD60A"
+    )
+]
+
 let keymapPresetDefinitions: [KeymapPresetDefinition] = [
     KeymapPresetDefinition(name: "caps-esc", title: "Caps to Esc", description: "Map Caps Lock to Escape.", remaps: ["Caps=esc"]),
     KeymapPresetDefinition(name: "wasd-arrows", title: "WASD Arrows", description: "Map WASD to arrow keys.", remaps: ["W=up", "A=left", "S=down", "D=right"]),
@@ -392,6 +549,22 @@ func rgbPreset(named name: String) throws -> RGBPresetDefinition {
     return preset
 }
 
+func rgbLayoutPreset(named name: String) throws -> RGBLayoutPresetDefinition {
+    let token = keyLookupToken(name)
+    guard let preset = rgbLayoutPresetDefinitions.first(where: { keyLookupToken($0.name) == token || keyLookupToken($0.title) == token }) else {
+        throw DriverError.invalidArgument("Unknown RGB layout preset '\(name)'. Run rgb-layout-list to see available presets.")
+    }
+    return preset
+}
+
+func rgbColorTheme(named name: String) throws -> RGBColorThemeDefinition {
+    let token = keyLookupToken(name)
+    guard let theme = rgbColorThemeDefinitions.first(where: { keyLookupToken($0.name) == token || keyLookupToken($0.title) == token }) else {
+        throw DriverError.invalidArgument("Unknown RGB color theme '\(name)'. Run rgb-theme-list to see available themes.")
+    }
+    return theme
+}
+
 func keymapPreset(named name: String) throws -> KeymapPresetDefinition {
     let token = keyLookupToken(name)
     guard let preset = keymapPresetDefinitions.first(where: { keyLookupToken($0.name) == token || keyLookupToken($0.title) == token }) else {
@@ -472,6 +645,77 @@ func rgbPresetFrames(_ preset: RGBPresetDefinition) throws -> [[UInt8]] {
     return frames
 }
 
+func rgbThemedPreset(_ layout: RGBLayoutPresetDefinition, theme: RGBColorThemeDefinition) throws -> RGBPresetDefinition {
+    let fill = try rgbColorHex(for: layout.fillRole, in: theme)
+    let assignments = try layout.assignments.map { assignment in
+        let parts = assignment.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+            throw DriverError.invalidArgument("Invalid RGB layout assignment '\(assignment)' in \(layout.name).")
+        }
+        let target = String(parts[0])
+        let role = String(parts[1])
+        return "\(target)=\(try rgbColorHex(for: role, in: theme))"
+    }
+    return RGBPresetDefinition(
+        name: "\(layout.name)-\(theme.name)",
+        title: "\(layout.title) / \(theme.title)",
+        description: "\(layout.description) Theme: \(theme.description)",
+        fill: fill,
+        assignments: assignments
+    )
+}
+
+func rgbThemedPresetFrames(layout: RGBLayoutPresetDefinition, theme: RGBColorThemeDefinition) throws -> [[UInt8]] {
+    try rgbPresetFrames(try rgbThemedPreset(layout, theme: theme))
+}
+
+private func rgbColorThemeDefinition(
+    name: String,
+    title: String,
+    description: String,
+    base: String? = nil,
+    palette: [String],
+    text: String? = nil
+) -> RGBColorThemeDefinition {
+    let normalizedPalette = palette.isEmpty ? ["000000"] : palette.map { $0.uppercased() }
+    let primary = normalizedPalette[0]
+    let secondary = rgbPaletteColor(normalizedPalette, at: 1, fallback: primary)
+    let tertiary = rgbPaletteColor(normalizedPalette, at: 2, fallback: secondary)
+    let quaternary = rgbPaletteColor(normalizedPalette, at: 3, fallback: tertiary)
+    let accent = rgbPaletteColor(normalizedPalette, at: 4, fallback: quaternary)
+    let textColor = text?.uppercased() ?? primary
+    var colors: [String: String] = [
+        "base": (base ?? "000000").uppercased(),
+        "primary": primary,
+        "secondary": secondary,
+        "tertiary": tertiary,
+        "quaternary": quaternary,
+        "accent": accent,
+        "danger": normalizedPalette.last ?? primary,
+        "text": textColor
+    ]
+    for index in 1...12 {
+        colors["c\(index)"] = normalizedPalette[(index - 1) % normalizedPalette.count]
+    }
+    return RGBColorThemeDefinition(name: name, title: title, description: description, colors: colors)
+}
+
+private func rgbPaletteColor(_ palette: [String], at index: Int, fallback: String) -> String {
+    palette.indices.contains(index) ? palette[index] : fallback
+}
+
+private func rgbColorHex(for role: String, in theme: RGBColorThemeDefinition) throws -> String {
+    let token = keyLookupToken(role)
+    guard let value = theme.colors.first(where: { keyLookupToken($0.key) == token })?.value.uppercased() else {
+        throw DriverError.invalidArgument("RGB theme \(theme.name) does not define color role '\(role)'.")
+    }
+    let bytes = try parseHexBytes(value)
+    guard bytes.count == 3 else {
+        throw DriverError.invalidArgument("RGB theme \(theme.name) has invalid color \(value) for role '\(role)'.")
+    }
+    return value
+}
+
 func keymapPresetRemaps(_ preset: KeymapPresetDefinition) throws -> [KeymapRemap] {
     try parseKeymapRemapSpecs(preset.remaps)
 }
@@ -493,6 +737,20 @@ func printRGBPresetList() {
     print("RGB presets:")
     for preset in rgbPresetDefinitions {
         print("  \(preset.name) - \(preset.title): \(preset.description)")
+    }
+}
+
+func printRGBLayoutPresetList() {
+    print("RGB layout presets:")
+    for preset in rgbLayoutPresetDefinitions {
+        print("  \(preset.name) - \(preset.title): \(preset.description)")
+    }
+}
+
+func printRGBColorThemeList() {
+    print("RGB color themes:")
+    for theme in rgbColorThemeDefinitions {
+        print("  \(theme.name) - \(theme.title): \(theme.description)")
     }
 }
 

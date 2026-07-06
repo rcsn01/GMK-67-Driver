@@ -80,12 +80,16 @@ extension DriverModel {
 
     func runRGBWrite(_ arguments: [String], title: String) {
         runLiveHIDCapture(arguments, title: title) {
-            self.requestCurrentRGBRefresh()
+            self.requestCurrentRGBRefreshAfterWrite()
         }
     }
 
     func applyRGBPreset(named preset: String, title: String) {
         runRGBWrite(["rgb-preset-apply", preset], title: title)
+    }
+
+    func applyRGBLayoutTheme() {
+        runRGBWrite(["rgb-theme-apply", rgbPresetName, rgbThemeName], title: "Apply RGB preset and color theme")
     }
 
     func setRGBKey() {
@@ -239,30 +243,29 @@ extension DriverModel {
 
     func createRGBPresetProfile() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(rgbPresetName)-rgb.hex"
+        panel.nameFieldStringValue = "\(rgbPresetName)-\(rgbThemeName)-rgb.hex"
         panel.allowedContentTypes = []
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in
-                self.run(["rgb-preset-create", url.path, self.rgbPresetName], title: "Create RGB preset profile")
+                self.run(["rgb-theme-create", url.path, self.rgbPresetName, self.rgbThemeName], title: "Create RGB preset profile")
             }
         }
     }
 
     func applyRGBPreset() {
-        applyRGBPreset(named: rgbPresetName, title: "Apply RGB preset")
+        applyRGBLayoutTheme()
     }
 
     func loadRGBPresetIntoEditor() {
-        runCapture(["rgb-preset-show", rgbPresetName, "--json"], title: "Load RGB preset into editor") { text, status in
+        runCapture(["rgb-theme-show", rgbPresetName, rgbThemeName, "--json"], title: "Load RGB preset into editor") { text, status in
             guard status == 0 else { return }
             do {
                 let preset = try JSONDecoder().decode(AppRGBPreset.self, from: Data(text.utf8))
-                self.rgbPresetName = preset.name
                 self.profileFillHex = preset.fill.uppercased()
                 self.mapSpecs = preset.assignments.joined(separator: " ")
                 self.combinedProfileIncludesRGBMap = true
-                self.append("Loaded RGB preset \(preset.name) into the editor: \(preset.description)")
+                self.append("Loaded RGB preset \(self.rgbPresetName) with color theme \(self.rgbThemeName) into the editor: \(preset.description)")
             } catch {
                 self.append("Could not parse RGB preset JSON: \(error.localizedDescription)")
             }

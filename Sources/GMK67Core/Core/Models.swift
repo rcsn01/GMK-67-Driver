@@ -70,6 +70,21 @@ struct RGBPresetDefinition: Codable {
     let assignments: [String]
 }
 
+struct RGBLayoutPresetDefinition: Codable {
+    let name: String
+    let title: String
+    let description: String
+    let fillRole: String
+    let assignments: [String]
+}
+
+struct RGBColorThemeDefinition: Codable {
+    let name: String
+    let title: String
+    let description: String
+    let colors: [String: String]
+}
+
 struct KeymapPresetDefinition: Codable {
     let name: String
     let title: String

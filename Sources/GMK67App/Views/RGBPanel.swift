@@ -3,9 +3,11 @@ import SwiftUI
 struct RGBPanel: View {
     @ObservedObject var model: DriverModel
     private let presets = [
-        "off", "white", "red", "blue", "green", "purple", "cyan", "orange", "pink", "gold",
-        "wasd", "arrows", "coding", "rainbow", "ocean", "sunset",
-        "fire", "ice", "forest", "matrix", "aurora", "cyberpunk", "pastel", "lava"
+        "all", "wasd", "arrows", "coding", "rows"
+    ]
+    private let themes = [
+        "off", "white", "red", "green", "blue", "purple", "cyan", "orange", "yellow", "pink", "gold",
+        "rainbow", "ocean", "sunset", "fire", "ice", "forest", "matrix", "aurora", "cyberpunk", "pastel", "lava"
     ]
 
     var body: some View {
@@ -16,6 +18,14 @@ struct RGBPanel: View {
                     Picker("", selection: $model.rgbPresetName) {
                         ForEach(presets, id: \.self) { preset in
                             Text(preset).tag(preset)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                    Text("Theme")
+                    Picker("", selection: $model.rgbThemeName) {
+                        ForEach(themes, id: \.self) { theme in
+                            Text(theme).tag(theme)
                         }
                     }
                     .labelsHidden()

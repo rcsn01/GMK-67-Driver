@@ -198,7 +198,8 @@ func run(_ args: [String]) throws {
             options.profile,
             hasUnsafeFlag: options.hasUnsafeFlag,
             writeIndex: options.writeIndex,
-            readIndex: options.readIndex
+            readIndex: options.readIndex,
+            writeMode: options.writeMode
         )
 
     case "profile-export":
@@ -222,7 +223,8 @@ func run(_ args: [String]) throws {
             profile,
             hasUnsafeFlag: options.hasUnsafeFlag,
             writeIndex: options.writeIndex,
-            readIndex: options.readIndex
+            readIndex: options.readIndex,
+            writeMode: options.writeMode
         )
 
     case "profile-preset-list":
@@ -271,7 +273,8 @@ func run(_ args: [String]) throws {
             profile,
             hasUnsafeFlag: options.hasUnsafeFlag,
             writeIndex: options.writeIndex,
-            readIndex: options.readIndex
+            readIndex: options.readIndex,
+            writeMode: options.writeMode
         )
 
     case "profile-library-create":
@@ -382,7 +385,8 @@ func run(_ args: [String]) throws {
             profile,
             hasUnsafeFlag: options.hasUnsafeFlag,
             writeIndex: options.writeIndex,
-            readIndex: options.readIndex
+            readIndex: options.readIndex,
+            writeMode: options.writeMode
         )
 
     case "profile-library-delete":
@@ -1642,24 +1646,27 @@ func run(_ args: [String]) throws {
             }
         }
         if wantsJSON {
-            try printRGBRecordsJSON(frames, keyByLightIndex: keyMapByLightIndex())
+            try printRGBRecordsJSON(normalizedRGBTableFrames(frames), keyByLightIndex: keyMapByLightIndex())
         } else {
             print("Non-zero RGB records:")
-            printRGBRecords(frames, keyByLightIndex: keyMapByLightIndex())
+            printRGBRecords(normalizedRGBTableFrames(frames), keyByLightIndex: keyMapByLightIndex())
         }
 
     case "rgb-set-key":
-        guard args.count >= 4, args.count <= 6 else {
+        let parsedArguments = parseLegacyRGBTableFlag(args)
+        let commandArgs = parsedArguments.arguments
+        let writeMode = parsedArguments.writeMode
+        guard commandArgs.count >= 4, commandArgs.count <= 6 else {
             printUsage()
             return
         }
-        let keyArgument = args[2]
-        let colorBytes = try parseHexBytes(args[3])
+        let keyArgument = commandArgs[2]
+        let colorBytes = try parseHexBytes(commandArgs[3])
         guard colorBytes.count == 3 else {
             throw DriverError.invalidArgument("Color must be exactly three bytes, for example FF0000 or FF 00 00.")
         }
-        let writeIndex = args.count > 4 ? Int(args[4]) : 0
-        let readIndex = args.count > 5 ? Int(args[5]) : 0
+        let writeIndex = commandArgs.count > 4 ? Int(commandArgs[4]) : 0
+        let readIndex = commandArgs.count > 5 ? Int(commandArgs[5]) : 0
         guard let writeIndex, let readIndex else {
             printUsage()
             return
@@ -1685,7 +1692,8 @@ func run(_ args: [String]) throws {
 
         let keyLabel = target.label
         print(String(format: "Setting %@ (0x%02X) to %02X %02X %02X", keyLabel, lightIndex, colorBytes[0], colorBytes[1], colorBytes[2]))
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
         print("Write sequence sent. Reading rendered table back...")
 
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
@@ -1736,7 +1744,8 @@ func run(_ args: [String]) throws {
                 assignment.color[2]
             ))
         }
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(options.writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: options.writeMode)
         print("Write sequence sent. Reading rendered table back...")
 
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
@@ -1808,6 +1817,54 @@ func run(_ args: [String]) throws {
         }
         printRGBPresetList()
 
+    case "rgb-layout-list":
+        guard args.count == 2 else {
+            printUsage()
+            return
+        }
+        printRGBLayoutPresetList()
+
+    case "rgb-theme-list":
+        guard args.count == 2 else {
+            printUsage()
+            return
+        }
+        printRGBColorThemeList()
+
+    case "rgb-theme-show":
+        guard args.count == 4 || args.count == 5 else {
+            printUsage()
+            return
+        }
+        let layout = try rgbLayoutPreset(named: args[2])
+        let theme = try rgbColorTheme(named: args[3])
+        let preset = try rgbThemedPreset(layout, theme: theme)
+        if args.count == 5 {
+            guard args[4] == "--json" else {
+                printUsage()
+                return
+            }
+            try printRGBPresetJSON(preset)
+        } else {
+            printRGBPreset(preset)
+        }
+
+    case "rgb-theme-create":
+        guard args.count == 5 else {
+            printUsage()
+            return
+        }
+        let outputPath = args[2]
+        let layout = try rgbLayoutPreset(named: args[3])
+        let theme = try rgbColorTheme(named: args[4])
+        let preset = try rgbThemedPreset(layout, theme: theme)
+        let frames = try rgbPresetFrames(preset)
+        try writeRGBFramesFile(frames, path: outputPath)
+        print("Saved RGB layout \(layout.name) with color theme \(theme.name) to \(outputPath). No HID device was opened.")
+        print("\(preset.title): \(preset.description)")
+        print("Non-zero RGB records:")
+        printRGBRecords(frames, keyByLightIndex: keyMapByLightIndex())
+
     case "rgb-preset-show":
         guard args.count == 3 || args.count == 4 else {
             printUsage()
@@ -1838,14 +1895,58 @@ func run(_ args: [String]) throws {
         print("Non-zero RGB records:")
         printRGBRecords(frames, keyByLightIndex: keyMapByLightIndex())
 
-    case "rgb-preset-apply":
-        guard args.count >= 3, args.count <= 5 else {
+    case "rgb-theme-apply":
+        let parsedArguments = parseLegacyRGBTableFlag(args)
+        let commandArgs = parsedArguments.arguments
+        let writeMode = parsedArguments.writeMode
+        guard commandArgs.count >= 4, commandArgs.count <= 6 else {
             printUsage()
             return
         }
-        let preset = try rgbPreset(named: args[2])
-        let writeIndex = args.count > 3 ? Int(args[3]) : 0
-        let readIndex = args.count > 4 ? Int(args[4]) : 0
+        let layout = try rgbLayoutPreset(named: commandArgs[2])
+        let theme = try rgbColorTheme(named: commandArgs[3])
+        let writeIndex = commandArgs.count > 4 ? Int(commandArgs[4]) : 0
+        let readIndex = commandArgs.count > 5 ? Int(commandArgs[5]) : 0
+        guard let writeIndex, let readIndex else {
+            printUsage()
+            return
+        }
+
+        let driver = HIDDriver()
+        let devices = driver.devices()
+        guard devices.indices.contains(writeIndex), devices.indices.contains(readIndex) else {
+            throw DriverError.noDevice
+        }
+        let writeDevice = try driver.device(at: writeIndex, configurationOnly: false)
+        let readDevice = try driver.device(at: readIndex, configurationOnly: false)
+
+        let currentFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
+        let backupPath = try backupRGBFrames(currentFrames)
+        print("Saved pre-write RGB table to \(backupPath).")
+
+        let preset = try rgbThemedPreset(layout, theme: theme)
+        let frames = try rgbPresetFrames(preset)
+        print("Applying RGB layout \(layout.name) with color theme \(theme.name): \(preset.description)")
+        print("RGB write path: \(writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
+        print("Write sequence sent. Reading rendered table back...")
+
+        let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
+        print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the bytes sent.")
+        print("Non-zero RGB records:")
+        printRGBRecords(verifyFrames, keyByLightIndex: keyMapByLightIndex())
+
+    case "rgb-preset-apply":
+        let parsedArguments = parseLegacyRGBTableFlag(args)
+        let commandArgs = parsedArguments.arguments
+        let writeMode = parsedArguments.writeMode
+        guard commandArgs.count >= 3, commandArgs.count <= 5 else {
+            printUsage()
+            return
+        }
+        let preset = try rgbPreset(named: commandArgs[2])
+        let writeIndex = commandArgs.count > 3 ? Int(commandArgs[3]) : 0
+        let readIndex = commandArgs.count > 4 ? Int(commandArgs[4]) : 0
         guard let writeIndex, let readIndex else {
             printUsage()
             return
@@ -1865,7 +1966,8 @@ func run(_ args: [String]) throws {
 
         let frames = try rgbPresetFrames(preset)
         print("Applying RGB preset \(preset.name): \(preset.description)")
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
         print("Write sequence sent. Reading rendered table back...")
 
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
@@ -1889,26 +1991,29 @@ func run(_ args: [String]) throws {
         }
 
     case "rgb-set-all", "rgb-clear":
+        let parsedArguments = parseLegacyRGBTableFlag(args)
+        let commandArgs = parsedArguments.arguments
+        let writeMode = parsedArguments.writeMode
         let colorBytes: [UInt8]
         let writeIndexArgument: Int
         if command == "rgb-clear" {
             colorBytes = [0, 0, 0]
             writeIndexArgument = 2
         } else {
-            guard args.count >= 3 else {
+            guard commandArgs.count >= 3 else {
                 printUsage()
                 return
             }
-            let parsedColor = try parseHexBytes(args[2])
+            let parsedColor = try parseHexBytes(commandArgs[2])
             guard parsedColor.count == 3 else {
                 throw DriverError.invalidArgument("Color must be exactly three bytes, for example FF0000 or FF 00 00.")
             }
             colorBytes = parsedColor
             writeIndexArgument = 3
         }
-        let writeIndex = args.count > writeIndexArgument ? Int(args[writeIndexArgument]) : 0
-        let readIndex = args.count > writeIndexArgument + 1 ? Int(args[writeIndexArgument + 1]) : 0
-        guard args.count <= writeIndexArgument + 2, let writeIndex, let readIndex else {
+        let writeIndex = commandArgs.count > writeIndexArgument ? Int(commandArgs[writeIndexArgument]) : 0
+        let readIndex = commandArgs.count > writeIndexArgument + 1 ? Int(commandArgs[writeIndexArgument + 1]) : 0
+        guard commandArgs.count <= writeIndexArgument + 2, let writeIndex, let readIndex else {
             printUsage()
             return
         }
@@ -1935,7 +2040,8 @@ func run(_ args: [String]) throws {
             colorBytes[1],
             colorBytes[2]
         ))
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
         print("Write sequence sent. Reading rendered table back...")
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
         print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the bytes sent.")
@@ -1969,13 +2075,16 @@ func run(_ args: [String]) throws {
         printRGBRecords(frames, keyByLightIndex: keyMapByLightIndex())
 
     case "rgb-restore":
-        guard args.count >= 3, args.count <= 5 else {
+        let parsedArguments = parseLegacyRGBTableFlag(args)
+        let commandArgs = parsedArguments.arguments
+        let writeMode = parsedArguments.writeMode
+        guard commandArgs.count >= 3, commandArgs.count <= 5 else {
             printUsage()
             return
         }
-        let path = args[2]
-        let writeIndex = args.count > 3 ? Int(args[3]) : 0
-        let readIndex = args.count > 4 ? Int(args[4]) : 0
+        let path = commandArgs[2]
+        let writeIndex = commandArgs.count > 3 ? Int(commandArgs[3]) : 0
+        let readIndex = commandArgs.count > 4 ? Int(commandArgs[4]) : 0
         guard let writeIndex, let readIndex else {
             printUsage()
             return
@@ -1993,7 +2102,8 @@ func run(_ args: [String]) throws {
         let backupPath = try backupRGBFrames(currentFrames)
         print("Saved pre-restore RGB table to \(backupPath).")
 
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
         print("Restored RGB table from \(path). Reading rendered table back...")
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
         print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the file bytes.")
@@ -2044,7 +2154,8 @@ func run(_ args: [String]) throws {
         let backupPath = try backupRGBFrames(currentFrames)
         print("Saved pre-restore RGB table to \(backupPath).")
 
-        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+        print("RGB write path: \(options.writeMode.description).")
+        try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: options.writeMode)
         print("Restored latest RGB backup from \(backup.url.path). Reading rendered table back...")
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
         print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the backup file bytes.")

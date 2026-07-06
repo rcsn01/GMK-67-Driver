@@ -67,7 +67,13 @@ final class HIDDriver {
     }
 
     private func open(_ device: IOHIDDevice) throws -> IOHIDDevice {
-        let result = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+        let options: IOOptionBits
+        if ProcessInfo.processInfo.environment["GMK67_SEIZE_DEVICE"] == "1" {
+            options = IOOptionBits(kIOHIDOptionsTypeSeizeDevice)
+        } else {
+            options = IOOptionBits(kIOHIDOptionsTypeNone)
+        }
+        let result = IOHIDDeviceOpen(device, options)
         guard result == kIOReturnSuccess else { throw DriverError.openFailed(result) }
         return device
     }
@@ -116,6 +122,45 @@ final class HIDDriver {
         guard result == kIOReturnSuccess else { throw DriverError.setReportFailed(result) }
     }
 
+    func setOutput(device: IOHIDDevice, reportID: Int, payload: [UInt8]) throws {
+        var buffer = payload
+        let result = IOHIDDeviceSetReport(
+            device,
+            kIOHIDReportTypeOutput,
+            CFIndex(reportID),
+            &buffer,
+            buffer.count
+        )
+        guard result == kIOReturnSuccess else { throw DriverError.setReportFailed(result) }
+    }
+
+    func setVendorFeature64(device: IOHIDDevice, payload: [UInt8]) throws {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Vendor feature payloads must be exactly 64 bytes.")
+        }
+        if
+            ProcessInfo.processInfo.environment["GMK67_COMMAND_REPORT_ID4"] == "1",
+            payload.first == 0x04,
+            payload.dropFirst().first != 0xF5
+        {
+            try setFeature(device: device, reportID: 0x04, payload: Array(payload.dropFirst()))
+        } else {
+            try setFeature(device: device, reportID: 0, payload: payload)
+        }
+    }
+
+    func setFeatureWindowsFramed(device: IOHIDDevice, payload: [UInt8]) throws {
+        var buffer = [UInt8(0)] + payload
+        let result = IOHIDDeviceSetReport(
+            device,
+            kIOHIDReportTypeFeature,
+            0,
+            &buffer,
+            buffer.count
+        )
+        guard result == kIOReturnSuccess else { throw DriverError.setReportFailed(result) }
+    }
+
     func listenInput(device: IOHIDDevice, length: Int, seconds: Double) throws {
         try withInputListener(device: device, length: length, seconds: seconds, decoder: nil, beforeRun: nil)
     }
@@ -145,7 +190,28 @@ final class HIDDriver {
             throw DriverError.invalidArgument("Feature payload must be 64 bytes or fewer.")
         }
         let payload = bytes + [UInt8](repeating: 0, count: 64 - bytes.count)
-        try setFeature(device: device, reportID: 0, payload: payload)
+        try setVendorFeature64(device: device, payload: payload)
+    }
+
+    func sendFeature64WindowsFramed(device: IOHIDDevice, bytes: [UInt8]) throws {
+        guard bytes.count <= 64 else {
+            throw DriverError.invalidArgument("Feature payload must be 64 bytes or fewer.")
+        }
+        let payload = bytes + [UInt8](repeating: 0, count: 64 - bytes.count)
+        try setFeatureWindowsFramed(device: device, payload: payload)
+    }
+
+    func sendTableChunk64(device: IOHIDDevice, payload: [UInt8]) throws {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Table chunk payloads must be exactly 64 bytes.")
+        }
+        if ProcessInfo.processInfo.environment["GMK67_TABLE_CHUNKS_AS_FEATURE"] == "1" {
+            try setVendorFeature64(device: device, payload: payload)
+        } else if ProcessInfo.processInfo.environment["GMK67_TABLE_CHUNKS_OUTPUT_64"] == "1" {
+            try setOutput(device: device, reportID: 0, payload: payload)
+        } else {
+            try setOutput(device: device, reportID: 0, payload: [0] + payload)
+        }
     }
 
     private func withInputListener(

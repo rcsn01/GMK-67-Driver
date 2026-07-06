@@ -3,6 +3,12 @@
 This repository includes three Windows GMK67 installers. They are Inno Setup
 packages and can be unpacked without executing them.
 
+The two Zuoya setup artifacts are byte-identical. The BOYI installer has
+different branding/runtime files, but the protocol-relevant `DeviceDriver.exe`
+paths checked for RGB writes match the Zuoya driver: the `HidD_SetFeature`
+wrapper, the `04 23` custom-lighting table writer, and the follow-up `04 13`
+activation routine all use the same HID report shapes.
+
 Useful extracted files:
 
 - `device.xml`: declares the target device as VID `05AC`, PID `024F`, product
@@ -296,7 +302,11 @@ Lighting/profile candidates:
   `keyboard-settings-apply` sends only validated files.
 - A custom lighting mode table path at VA `0x41DCD0` sends `04 18`, then
   `04 23` with byte 8 set to `03` or `09`, builds a per-key table with an
-  `AA 55` marker, then finishes with `04 02` and `04 F0`.
+  `AA 55` marker, then finishes with `04 02` and `04 F0`. On return from the
+  selector-09 custom RGB branch, Windows immediately calls the short operation
+  routine at VA `0x41E050`, which sends `04 18`, `04 13` with byte 8 set to
+  `01`, a `static-80` style payload, `04 02`, and `04 F0`. Selector-09 alone
+  writes the custom table but does not match the full native apply sequence.
 - The extended/custom-RGB branch of that `04 23` path checks a mode flag, sets
   selector byte 8 to `09`, writes a declared `0x280`-byte table through the
   same Windows chunk wrapper, and places `AA 55` at table offset `0x23E`.

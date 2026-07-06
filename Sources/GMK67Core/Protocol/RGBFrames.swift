@@ -189,19 +189,82 @@ func setRGBRecord(frames: inout [[UInt8]], lightIndex: Int, color: [UInt8]) thro
     frames[frameIndex][recordOffset + 3] = color[2]
 }
 
+func isRGBReadbackEchoFrame(_ frame: [UInt8]) -> Bool {
+    frame.count >= 9 && frame[0] == 0x04 && frame[1] == 0xF5
+}
+
+func normalizedRGBTableFrames(_ frames: [[UInt8]]) -> [[UInt8]] {
+    guard let first = frames.first, isRGBReadbackEchoFrame(first) else {
+        return frames
+    }
+    return Array(frames.dropFirst())
+}
+
+enum RGBWriteMode {
+    case persistentCustomLighting
+    case legacyTable
+
+    var description: String {
+        switch self {
+        case .persistentCustomLighting:
+            return "native custom-lighting RGB path (04 23 selector 09, then 04 13 static-80 activation)"
+        case .legacyTable:
+            return "legacy static RGB table path (04 20 / table chunks / 04 02)"
+        }
+    }
+}
+
+func rgbFrameAssignments(from frames: [[UInt8]], recordByteLimit: Int = 0x23E) throws -> [RGBAssignment] {
+    guard !frames.isEmpty, frames.allSatisfy({ $0.count == 64 }) else {
+        throw DriverError.invalidArgument("RGB frames must be 64-byte tables.")
+    }
+
+    let keyMap = keyMapByLightIndex()
+    var assignmentsByLightIndex: [Int: RGBAssignment] = [:]
+    for (chunkIndex, bytes) in frames.enumerated() {
+        var offset = 0
+        while offset + 3 < bytes.count {
+            let tableOffset = chunkIndex * 64 + offset
+            guard tableOffset + 3 < recordByteLimit else {
+                break
+            }
+
+            let slotIndex = tableOffset / 4
+            let encodedIndex = Int(bytes[offset])
+            let lightIndex = encodedIndex == 0 ? slotIndex : encodedIndex
+            guard lightIndex * 4 + 3 < recordByteLimit else {
+                offset += 4
+                continue
+            }
+
+            assignmentsByLightIndex[lightIndex] = RGBAssignment(
+                lightIndex: lightIndex,
+                label: keyMap[lightIndex]?.name ?? String(format: "0x%02X", lightIndex),
+                color: [bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]]
+            )
+            offset += 4
+        }
+    }
+
+    return assignmentsByLightIndex.keys.sorted().compactMap { assignmentsByLightIndex[$0] }
+}
+
 func readRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, readDevice: IOHIDDevice, chunks: Int = 9) throws -> [[UInt8]] {
     var readRequest = [UInt8](repeating: 0, count: 64)
     readRequest[0] = 0x04
     readRequest[1] = 0xF5
     readRequest[8] = UInt8(chunks)
-    try driver.setFeature(device: writeDevice, reportID: 0, payload: readRequest)
+    try driver.setVendorFeature64(device: writeDevice, payload: readRequest)
 
     var frames: [[UInt8]] = []
     for _ in 0..<chunks {
         usleep(50_000)
         frames.append(try driver.getInput(device: readDevice, reportID: 0, length: 64))
     }
-    return frames
+    if ProcessInfo.processInfo.environment["GMK67_RAW_RGB_READBACK"] == "1" {
+        return frames
+    }
+    return normalizedRGBTableFrames(frames)
 }
 
 public func readCurrentRGBRecords(writeIndex: Int = 0, readIndex: Int = 0, chunks: Int = 9) throws -> [RGBRecord] {
@@ -238,14 +301,31 @@ public func readCurrentRGBReadback(writeIndex: Int = 0, readIndex: Int = 0, chun
     return rgbLightReadbackRecords(frames, keyByLightIndex: keyMapByLightIndex())
 }
 
-func writeRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
-    guard frames.count >= 8, frames.prefix(8).allSatisfy({ $0.count == 64 }) else {
+func writeRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]], mode: RGBWriteMode = .persistentCustomLighting) throws {
+    switch mode {
+    case .persistentCustomLighting:
+        try writePersistentRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+    case .legacyTable:
+        try writeLegacyRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+    }
+}
+
+private func writePersistentRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
+    let assignments = try rgbFrameAssignments(from: normalizedRGBTableFrames(frames))
+    let table = try customLightingRGBTable(assignments: assignments)
+    try sendFeatureSequence(driver: driver, device: writeDevice, payloads: try nativePersistentRGBFeatureSequence(table: table))
+}
+
+private func writeLegacyRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
+    let normalizedFrames = normalizedRGBTableFrames(frames)
+    guard normalizedFrames.count >= 8, normalizedFrames.prefix(8).allSatisfy({ $0.count == 64 }) else {
         throw DriverError.invalidArgument("RGB restore requires at least eight 64-byte frames.")
     }
+    let tableFrames = Array(normalizedFrames.prefix(8))
     try driver.sendFeature64(device: writeDevice, bytes: [0x04, 0x20, 0, 0, 0, 0, 0, 0, 0x08])
     usleep(30_000)
-    for frame in frames.prefix(8) {
-        try driver.setFeature(device: writeDevice, reportID: 0, payload: frame)
+    for frame in tableFrames {
+        try driver.sendTableChunk64(device: writeDevice, payload: frame)
         usleep(30_000)
     }
     try driver.sendFeature64(device: writeDevice, bytes: [0x04, 0x02])

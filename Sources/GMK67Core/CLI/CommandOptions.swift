@@ -3,17 +3,35 @@ import CoreGraphics
 import IOKit
 import IOKit.hid
 
-func parseProfileApplyOptions(_ args: [String]) throws -> (path: String, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int) {
+let legacyRGBTableFlag = "--legacy-table"
+
+func parseLegacyRGBTableFlag(_ args: [String]) -> (arguments: [String], writeMode: RGBWriteMode) {
+    var filtered: [String] = []
+    var writeMode: RGBWriteMode = .persistentCustomLighting
+    for argument in args {
+        if argument == legacyRGBTableFlag {
+            writeMode = .legacyTable
+        } else {
+            filtered.append(argument)
+        }
+    }
+    return (filtered, writeMode)
+}
+
+func parseProfileApplyOptions(_ args: [String]) throws -> (path: String, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode) {
     guard let path = args.first else {
         throw DriverError.invalidArgument("profile-apply requires a path.")
     }
     var hasUnsafeFlag = false
     var writeIndex = 0
     var readIndex = 0
+    var writeMode: RGBWriteMode = .persistentCustomLighting
 
     for argument in args.dropFirst() {
         if argument == unsafeKeymapFlag {
             hasUnsafeFlag = true
+        } else if argument == legacyRGBTableFlag {
+            writeMode = .legacyTable
         } else if argument.hasPrefix("--write-index=") {
             let value = String(argument.dropFirst("--write-index=".count))
             guard let parsed = Int(value), parsed >= 0 else {
@@ -31,26 +49,29 @@ func parseProfileApplyOptions(_ args: [String]) throws -> (path: String, hasUnsa
         }
     }
 
-    return (path, hasUnsafeFlag, writeIndex, readIndex)
+    return (path, hasUnsafeFlag, writeIndex, readIndex, writeMode)
 }
 
-func parseProfilePresetApplyOptions(_ args: [String]) throws -> (name: String, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int) {
+func parseProfilePresetApplyOptions(_ args: [String]) throws -> (name: String, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode) {
     guard let name = args.first else {
         throw DriverError.invalidArgument("profile-preset-apply requires a preset name.")
     }
     let options = try parseProfileApplyOptions(["profile-preset"] + Array(args.dropFirst()))
-    return (name, options.hasUnsafeFlag, options.writeIndex, options.readIndex)
+    return (name, options.hasUnsafeFlag, options.writeIndex, options.readIndex, options.writeMode)
 }
 
-func parseInlineProfileApplyOptions(_ args: [String]) throws -> (profile: CombinedProfile, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int) {
+func parseInlineProfileApplyOptions(_ args: [String]) throws -> (profile: CombinedProfile, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode) {
     var profileArgs: [String] = []
     var hasUnsafeFlag = false
     var writeIndex = 0
     var readIndex = 0
+    var writeMode: RGBWriteMode = .persistentCustomLighting
 
     for argument in args {
         if argument == unsafeKeymapFlag {
             hasUnsafeFlag = true
+        } else if argument == legacyRGBTableFlag {
+            writeMode = .legacyTable
         } else if argument.hasPrefix("--write-index=") {
             let value = String(argument.dropFirst("--write-index=".count))
             guard let parsed = Int(value), parsed >= 0 else {
@@ -69,10 +90,10 @@ func parseInlineProfileApplyOptions(_ args: [String]) throws -> (profile: Combin
     }
 
     let profile = try parseProfileLibraryCreateOptions(profileArgs)
-    return (profile, hasUnsafeFlag, writeIndex, readIndex)
+    return (profile, hasUnsafeFlag, writeIndex, readIndex, writeMode)
 }
 
-func applyCombinedProfileToDevice(_ profile: CombinedProfile, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int) throws {
+func applyCombinedProfileToDevice(_ profile: CombinedProfile, hasUnsafeFlag: Bool, writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode = .persistentCustomLighting) throws {
     if combinedProfileHasKeymap(profile) && !hasUnsafeFlag {
         throw DriverError.invalidArgument("Refusing to apply a profile with keymap changes without \(unsafeKeymapFlag). RGB-only profile sections can be applied without the flag.")
     }
@@ -93,7 +114,8 @@ func applyCombinedProfileToDevice(_ profile: CombinedProfile, hasUnsafeFlag: Boo
 
     let frames = try combinedProfileRGBFrames(profile)
     print("Applying RGB profile \(profile.rgbPreset) with \(profile.rgbAssignments?.count ?? 0) custom assignment(s).")
-    try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames)
+    print("RGB write path: \(writeMode.description).")
+    try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: frames, mode: writeMode)
     print("RGB write sequence sent. Reading rendered table back...")
     let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
     print("Note: rendered RGB readback may be scaled or mode-composited and may not exactly echo the preset bytes.")
@@ -175,6 +197,7 @@ func applyFactoryResetToDevice(writeIndex: Int, readIndex: Int) throws {
     print("Saved pre-reset RGB table to \(backupPath).")
 
     let resetFrames = try factoryResetRGBFrames()
+    print("RGB write path: \(RGBWriteMode.persistentCustomLighting.description).")
     try writeRGBFrames(driver: driver, writeDevice: writeDevice, frames: resetFrames)
     print("RGB reset sequence sent. Reading rendered table back...")
     let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
@@ -200,13 +223,16 @@ func exportCombinedProfileArtifacts(_ profile: CombinedProfile, prefix: String) 
     return (rgbPath, nil)
 }
 
-func parseRGBMapOptions(_ args: [String]) throws -> (specs: [String], writeIndex: Int, readIndex: Int) {
+func parseRGBMapOptions(_ args: [String]) throws -> (specs: [String], writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode) {
     var specs: [String] = []
     var writeIndex = 0
     var readIndex = 0
+    var writeMode: RGBWriteMode = .persistentCustomLighting
 
     for argument in args {
-        if argument.hasPrefix("--write-index=") {
+        if argument == legacyRGBTableFlag {
+            writeMode = .legacyTable
+        } else if argument.hasPrefix("--write-index=") {
             let value = String(argument.dropFirst("--write-index=".count))
             guard let parsed = Int(value), parsed >= 0 else {
                 throw DriverError.invalidArgument("Invalid --write-index value: \(value)")
@@ -223,7 +249,7 @@ func parseRGBMapOptions(_ args: [String]) throws -> (specs: [String], writeIndex
         }
     }
 
-    return (specs, writeIndex, readIndex)
+    return (specs, writeIndex, readIndex, writeMode)
 }
 
 func parseRGBProfileCreateOptions(_ args: [String]) throws -> (specs: [String], fillColor: [UInt8]?) {
@@ -251,13 +277,16 @@ func parseRGBProfileCreateOptions(_ args: [String]) throws -> (specs: [String], 
     return (specs, fillColor)
 }
 
-func parseRGBRestoreLatestOptions(_ args: [String]) throws -> (directory: String, writeIndex: Int, readIndex: Int) {
+func parseRGBRestoreLatestOptions(_ args: [String]) throws -> (directory: String, writeIndex: Int, readIndex: Int, writeMode: RGBWriteMode) {
     var directory = "."
     var writeIndex = 0
     var readIndex = 0
+    var writeMode: RGBWriteMode = .persistentCustomLighting
 
     for argument in args {
-        if argument.hasPrefix("--directory=") {
+        if argument == legacyRGBTableFlag {
+            writeMode = .legacyTable
+        } else if argument.hasPrefix("--directory=") {
             directory = String(argument.dropFirst("--directory=".count))
             guard !directory.isEmpty else {
                 throw DriverError.invalidArgument("--directory must not be empty.")
@@ -279,7 +308,7 @@ func parseRGBRestoreLatestOptions(_ args: [String]) throws -> (directory: String
         }
     }
 
-    return (directory, writeIndex, readIndex)
+    return (directory, writeIndex, readIndex, writeMode)
 }
 
 func parseByteNumber(_ argument: String, label: String) throws -> Int {
@@ -712,13 +741,28 @@ func customLightingRGBTable(assignments: [RGBAssignment], brightnessScale: Int =
     // The Windows chunk wrapper sends nine 64-byte chunks; AA 55 lands at 0x23E.
     // Its table builder applies brightness before HID as (channel * scale) >> 8.
     var table = [UInt8](repeating: 0, count: 0x280)
+    let keyMap = keyMapByLightIndex()
     for assignment in assignments {
-        let offset = assignment.lightIndex * 4
+        let key = keyMap[assignment.lightIndex]
+        let tableIndex: Int
+        if ProcessInfo.processInfo.environment["GMK67_CUSTOM_RGB_OFFSET"] == "keycode", let key {
+            tableIndex = key.code
+        } else {
+            tableIndex = assignment.lightIndex
+        }
+        let offset = tableIndex * 4
         guard offset + 3 < 0x23E else {
+            if ProcessInfo.processInfo.environment["GMK67_CUSTOM_RGB_OFFSET"] == "keycode" {
+                continue
+            }
             throw DriverError.invalidArgument("Light index 0x\(String(format: "%02X", assignment.lightIndex)) is outside the custom-lighting RGB table range.")
         }
         let color = assignment.color.map { windowsBrightnessScaledChannel($0, brightnessScale: brightnessScale) }
-        table[offset] = UInt8(assignment.lightIndex)
+        if ProcessInfo.processInfo.environment["GMK67_CUSTOM_RGB_INDEX_BYTE"] == "keycode", let key {
+            table[offset] = UInt8(truncatingIfNeeded: key.code)
+        } else {
+            table[offset] = UInt8(assignment.lightIndex)
+        }
         table[offset + 1] = color[0]
         table[offset + 2] = color[1]
         table[offset + 3] = color[2]
@@ -737,6 +781,12 @@ func customLightingRGBFeatureSequence(table: [UInt8]) -> [[UInt8]] {
     let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
     let finish = [0x04, 0xF0] + [UInt8](repeating: 0, count: 62)
     return [begin, select] + windowsChunkedFeaturePayloads(table, declaredLength: table.count) + [commit, finish]
+}
+
+func nativePersistentRGBFeatureSequence(table: [UInt8]) throws -> [[UInt8]] {
+    // DeviceDriver.exe 0x41DCD0 writes the selector-09 table, then immediately
+    // calls the 0x41E050 short 04 13 activation path before returning.
+    try customLightingRGBFeatureSequence(table: table) + shortOperationTemplateFeatureSequence(variant: "static-80")
 }
 
 func lightingModeTable(assignments: [ByteAssignment]) throws -> [UInt8] {
@@ -801,6 +851,25 @@ func shortOperationTemplatePayload(variant: String) throws -> [UInt8] {
         payload[10] = 0x0F
     default:
         throw DriverError.invalidArgument("Unknown short-op template variant: \(variant). Use empty or static-80.")
+    }
+    if let override = ProcessInfo.processInfo.environment["GMK67_ACTIVATION_BYTES"], !override.isEmpty {
+        for assignment in override.split(separator: ",") {
+            let parts = assignment.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else {
+                throw DriverError.invalidArgument("GMK67_ACTIVATION_BYTES entries must use offset=value.")
+            }
+            let offsetText = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let valueText = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard
+                let offset = Int(offsetText, radix: 10) ?? Int(offsetText.replacingOccurrences(of: "0x", with: ""), radix: 16),
+                offset >= 0,
+                offset < payload.count,
+                let value = UInt8(valueText.replacingOccurrences(of: "0x", with: ""), radix: 16)
+            else {
+                throw DriverError.invalidArgument("Invalid GMK67_ACTIVATION_BYTES entry: \(assignment).")
+            }
+            payload[offset] = value
+        }
     }
     payload[14] = 0xAA
     payload[15] = 0x55
@@ -1201,11 +1270,24 @@ func validateAlternateFullTableFeatureSequenceFile(_ path: String, printSummary:
 }
 
 func sendFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    var tableChunksRemaining = 0
     for payload in payloads {
         guard payload.count == 64 else {
             throw DriverError.invalidArgument("Feature sequence payloads must be exactly 64 bytes.")
         }
-        try driver.setFeature(device: device, reportID: 0, payload: payload)
+        if tableChunksRemaining > 0 {
+            try driver.sendTableChunk64(device: device, payload: payload)
+            tableChunksRemaining -= 1
+        } else {
+            try driver.setVendorFeature64(device: device, payload: payload)
+            if payload[0] == 0x04 {
+                if payload[1] == 0x11 || payload[1] == 0x23 || payload[1] == 0x27 {
+                    tableChunksRemaining = Int(payload[8])
+                } else if payload[1] == 0x15 {
+                    tableChunksRemaining = Int(payload[8])
+                }
+            }
+        }
         usleep(30_000)
     }
 }
@@ -1479,13 +1561,23 @@ func runSelfTest(verbose: Bool = true) throws {
     let restoreLatestOptions = try parseRGBRestoreLatestOptions([
         "--directory=\(tempDirectory.path)",
         "--write-index=2",
-        "--read-index=3"
+        "--read-index=3",
+        legacyRGBTableFlag
     ])
     try assertSelfTest(
         restoreLatestOptions.directory == tempDirectory.path &&
             restoreLatestOptions.writeIndex == 2 &&
-            restoreLatestOptions.readIndex == 3,
+            restoreLatestOptions.readIndex == 3 &&
+            restoreLatestOptions.writeMode == .legacyTable,
         "restore latest option parsing"
+    )
+    let rgbMapOptions = try parseRGBMapOptions(["W=FF0000", "--write-index=4", "--read-index=5", legacyRGBTableFlag])
+    try assertSelfTest(
+        rgbMapOptions.specs == ["W=FF0000"] &&
+            rgbMapOptions.writeIndex == 4 &&
+            rgbMapOptions.readIndex == 5 &&
+            rgbMapOptions.writeMode == .legacyTable,
+        "RGB map option parsing"
     )
 
     let profileOptions = try parseRGBProfileCreateOptions(["--fill=000000", "W=FF0000"])
@@ -1514,6 +1606,10 @@ func runSelfTest(verbose: Bool = true) throws {
     try expectInvalidArgument("unknown RGB preset") {
         _ = try rgbPreset(named: "unknown")
     }
+    let themedWASD = try rgbThemedPreset(try rgbLayoutPreset(named: "wasd"), theme: try rgbColorTheme(named: "yellow"))
+    try assertSelfTest(themedWASD.fill == "000000" && themedWASD.assignments.contains("W=FFFF00"), "RGB layout/theme composition")
+    let themedWASDFrames = try rgbPresetFrames(themedWASD)
+    try assertSelfTest(Array(themedWASDFrames[2][28..<32]) == [0x27, 0xFF, 0xFF, 0x00], "RGB layout/theme W color")
 
     let wasdKeymapPreset = try keymapPreset(named: "wasd-arrows")
     let wasdKeymapPresetData = try JSONEncoder().encode(wasdKeymapPreset)
@@ -1702,8 +1798,8 @@ func runSelfTest(verbose: Bool = true) throws {
             inlineExportedArtifacts.keymapPath.map { FileManager.default.fileExists(atPath: $0) } == true,
         "inline combined profile artifact export"
     )
-    let applyProfileOptions = try parseProfileApplyOptions([combinedProfilePath, unsafeKeymapFlag, "--write-index=2", "--read-index=3"])
-    try assertSelfTest(applyProfileOptions.path == combinedProfilePath && applyProfileOptions.hasUnsafeFlag && applyProfileOptions.writeIndex == 2 && applyProfileOptions.readIndex == 3, "combined profile apply options")
+    let applyProfileOptions = try parseProfileApplyOptions([combinedProfilePath, unsafeKeymapFlag, "--write-index=2", "--read-index=3", legacyRGBTableFlag])
+    try assertSelfTest(applyProfileOptions.path == combinedProfilePath && applyProfileOptions.hasUnsafeFlag && applyProfileOptions.writeIndex == 2 && applyProfileOptions.readIndex == 3 && applyProfileOptions.writeMode == .legacyTable, "combined profile apply options")
     try expectInvalidArgument("combined profile invalid preset") {
         try validateCombinedProfile(CombinedProfile(format: "gmk67-profile", version: 1, name: "bad", rgbPreset: "unknown", keymapPreset: nil))
     }
@@ -1718,8 +1814,8 @@ func runSelfTest(verbose: Bool = true) throws {
             editableGamingProfile.keymapRemaps?.contains("Caps=esc") == true,
         "combined profile preset editor expansion"
     )
-    let presetApplyOptions = try parseProfilePresetApplyOptions(["gaming", unsafeKeymapFlag, "--write-index=1", "--read-index=2"])
-    try assertSelfTest(presetApplyOptions.name == "gaming" && presetApplyOptions.hasUnsafeFlag && presetApplyOptions.writeIndex == 1 && presetApplyOptions.readIndex == 2, "combined profile preset apply options")
+    let presetApplyOptions = try parseProfilePresetApplyOptions(["gaming", unsafeKeymapFlag, "--write-index=1", "--read-index=2", legacyRGBTableFlag])
+    try assertSelfTest(presetApplyOptions.name == "gaming" && presetApplyOptions.hasUnsafeFlag && presetApplyOptions.writeIndex == 1 && presetApplyOptions.readIndex == 2 && presetApplyOptions.writeMode == .legacyTable, "combined profile preset apply options")
     try expectInvalidArgument("unknown combined profile preset") {
         _ = try combinedProfilePreset(named: "unknown")
     }
@@ -1913,6 +2009,35 @@ func runSelfTest(verbose: Bool = true) throws {
     try assertSelfTest(lightingTable.count == 0x280, "custom lighting RGB table length")
     try assertSelfTest(Array(lightingTable[0x09C..<0x0A0]) == [0x27, 0xFF, 0x00, 0x00], "custom lighting W RGB record")
     try assertSelfTest(Array(lightingTable[0x23E..<0x240]) == [0xAA, 0x55], "custom lighting marker")
+    let persistentAssignments = try rgbFrameAssignments(from: profileFrames)
+    let persistentLightingTable = try customLightingRGBTable(assignments: persistentAssignments)
+    try assertSelfTest(Array(persistentLightingTable[0x09C..<0x0A0]) == [0x27, 0xFF, 0x00, 0x00], "persistent RGB frame conversion W record")
+    try assertSelfTest(Array(persistentLightingTable[0x23E..<0x240]) == [0xAA, 0x55], "persistent RGB frame conversion marker")
+    let persistentLightingSequence = customLightingRGBFeatureSequence(table: persistentLightingTable)
+    try assertSelfTest(persistentLightingSequence.count == 13, "persistent RGB sequence report count")
+    try assertSelfTest(Array(persistentLightingSequence[0].prefix(2)) == [0x04, 0x18], "persistent RGB begin report")
+    try assertSelfTest(Array(persistentLightingSequence[1].prefix(2)) == [0x04, 0x23] && persistentLightingSequence[1][8] == 0x09, "persistent RGB selector report")
+    try assertSelfTest(Array(persistentLightingSequence[10][62..<64]) == [0xAA, 0x55], "persistent RGB sequence marker")
+    try assertSelfTest(Array(persistentLightingSequence[11].prefix(2)) == [0x04, 0x02], "persistent RGB commit report")
+    try assertSelfTest(Array(persistentLightingSequence[12].prefix(2)) == [0x04, 0xF0], "persistent RGB finish report")
+    let nativePersistentSequence = try nativePersistentRGBFeatureSequence(table: persistentLightingTable)
+    try assertSelfTest(nativePersistentSequence.count == 18, "native persistent RGB sequence report count")
+    try assertSelfTest(Array(nativePersistentSequence[0].prefix(2)) == [0x04, 0x18], "native persistent RGB begin report")
+    try assertSelfTest(Array(nativePersistentSequence[1].prefix(2)) == [0x04, 0x23] && nativePersistentSequence[1][8] == 0x09, "native persistent RGB selector report")
+    try assertSelfTest(Array(nativePersistentSequence[10][62..<64]) == [0xAA, 0x55], "native persistent RGB table marker")
+    try assertSelfTest(Array(nativePersistentSequence[11].prefix(2)) == [0x04, 0x02], "native persistent RGB table commit report")
+    try assertSelfTest(Array(nativePersistentSequence[12].prefix(2)) == [0x04, 0xF0], "native persistent RGB table finish report")
+    try assertSelfTest(Array(nativePersistentSequence[13].prefix(2)) == [0x04, 0x18], "native persistent RGB activation begin report")
+    try assertSelfTest(Array(nativePersistentSequence[14].prefix(2)) == [0x04, 0x13] && nativePersistentSequence[14][8] == 0x01, "native persistent RGB activation selector report")
+    try assertSelfTest(
+        nativePersistentSequence[15][0] == 0x80 &&
+            nativePersistentSequence[15][9] == 0x0F &&
+            nativePersistentSequence[15][10] == 0x0F &&
+            Array(nativePersistentSequence[15][14..<16]) == [0xAA, 0x55],
+        "native persistent RGB activation payload"
+    )
+    try assertSelfTest(Array(nativePersistentSequence[16].prefix(2)) == [0x04, 0x02], "native persistent RGB activation commit report")
+    try assertSelfTest(Array(nativePersistentSequence[17].prefix(2)) == [0x04, 0xF0], "native persistent RGB activation finish report")
     let dimmedLightingTable = try customLightingRGBTable(assignments: profileAssignments, brightnessScale: 0x80)
     try assertSelfTest(Array(dimmedLightingTable[0x09C..<0x0A0]) == [0x27, 0x7F, 0x00, 0x00], "custom lighting Windows brightness scaling")
     let lightingSequence = customLightingRGBFeatureSequence(table: lightingTable)
@@ -2205,7 +2330,7 @@ func windowsFeatureInventoryText() -> String {
       The English language resource and embedded SQLite schema identify these UI feature groups.
 
     Implemented with proven live RGB path:
-      - Per-key static RGB readback/write through 04 F5, 04 20, and 04 02.
+      - Per-key RGB readback/write through 04 F5 and the native 04 23 selector-09 table plus 04 13 activation path.
       - RGB save, restore, backups, built-in presets, and combined profile RGB sections.
 
     Implemented as app-local profile/library features:
@@ -2217,7 +2342,7 @@ func windowsFeatureInventoryText() -> String {
       - Custom key remapping via 04 18 / 04 11 table sequence.
       - Alternate full table via 04 18 / 04 27 table sequence.
       - Keyboard/settings payload via 04 18 / 04 17 / payload / 04 02, including named gamemode, Alt-Tab, Alt-F4, Win-key, Fn-switch, and sleep-light fields.
-      - Custom lighting RGB via 04 18 / 04 23 selector 09 table sequence, including Windows-style brightness scaling before table write.
+      - Custom lighting RGB export/validation via 04 18 / 04 23 selector 09 table sequence, including Windows-style brightness scaling before table write.
       - Per-key lighting-mode/effect table via 04 18 / 04 23 selector 03.
       - Short lighting/profile operation via 04 18 / 04 13 / payload / 04 02 / 04 F0.
       - Macro firmware table container via 04 19 / 04 15 / 04 02 template and validator.
@@ -2231,12 +2356,13 @@ func windowsFeatureInventoryText() -> String {
       - Mouse-only panels from the shared driver shell: DPI, report rate, wheel speed, and pointer settings.
 
     Persistence finding:
-      The Windows static RGB write path observed at VA 0x418500 and 0x425E03 sends 04 20,
-      writes table chunks, then sends 04 02. No separate RGB save-to-flash opcode has been
-      proven on that path. Brightness in the Windows custom-lighting path is folded into RGB
-      bytes before table write, not sent as a separate command. The Windows profile persistence
-      visible in strings is primarily local SQLite state; firmware persistence still needs
-      physical reboot validation.
+      The Windows custom RGB apply path observed at VA 0x41DCD0 sends 04 23 selector 09,
+      writes a 0x280-byte table with AA55 at 0x23E, commits with 04 02 / 04 F0, then
+      immediately calls the 0x41E050 short 04 13 static-80 activation path. The older
+      static RGB table path observed at VA 0x418500 and 0x425E03 sends 04 20, writes
+      table chunks, then sends 04 02; it is retained as --legacy-table. No separate RGB
+      save-to-flash opcode has been proven. Brightness in the Windows custom-lighting path
+      is folded into RGB bytes before table write, not sent as a separate command.
     """
 }
 
@@ -2249,9 +2375,12 @@ func protocolCandidatesText() -> String {
         request: 04 F5, byte8 = 03 or 09
         read:    input report 00, 64-byte chunks
       RGB table write
-        begin:   04 20, byte8 = 08 on tested USB board
-        table:   first eight 64-byte RGB frames
+        begin:   04 18
+        select:  04 23, byte8 = 09
+        table:   nine 64-byte reports; AA 55 marker at table offset 0x23E
         commit:  04 02
+        finish:  04 F0
+        activate: 04 18 / 04 13 byte8 = 01 / static-80 payload / 04 02 / 04 F0
 
     Candidate, guarded or read-only only:
       Keymap/custom-key table
@@ -2285,7 +2414,7 @@ func protocolCandidatesText() -> String {
         table:   selector 03 declares 0x100 bytes; AA 55 marker at table offset 0xBE
         commit:  04 02
         finish:  04 F0
-        status:  selector 03 export/validate and Windows-named effect artifacts implemented; selector 09 RGB export models Windows brightness scaling with (channel * scale) >> 8; live writes guarded
+        status:  selector 03 export/validate and Windows-named effect artifacts implemented; selector 09 RGB export models Windows brightness scaling with (channel * scale) >> 8; normal RGB writes use selector 09 plus short 04 13 activation
 
       Macro firmware table container
         begin:   04 19

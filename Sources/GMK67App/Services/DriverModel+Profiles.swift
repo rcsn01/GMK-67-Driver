@@ -70,7 +70,7 @@ extension DriverModel {
             args.append("--unsafe-no-backup")
         }
         runLiveHIDCapture(args, title: "Apply current editor profile") {
-            self.requestCurrentRGBRefresh()
+            self.requestCurrentRGBRefreshAfterWrite()
         }
     }
 
@@ -274,7 +274,7 @@ extension DriverModel {
             args.append("--unsafe-no-backup")
         }
         runLiveHIDCapture(args, title: "Apply saved profile") {
-            self.requestCurrentRGBRefresh()
+            self.requestCurrentRGBRefreshAfterWrite()
         }
     }
 

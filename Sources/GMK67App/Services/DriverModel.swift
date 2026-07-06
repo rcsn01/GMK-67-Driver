@@ -21,6 +21,7 @@ final class DriverModel: ObservableObject {
     @Published var profileName = "rgb-profile.hex"
     @Published var mapSpecs = "W=FF0000 A=00FF00 S=0000FF D=00FFFF"
     @Published var rgbPresetName = "wasd"
+    @Published var rgbThemeName = "rainbow"
     @Published var combinedProfileName = "Gaming"
     @Published var combinedProfileIncludesKeymap = true
     @Published var combinedProfileIncludesRGBMap = false
@@ -271,6 +272,14 @@ extension DriverModel {
             currentRGBStatus = "Waiting for hardware RGB readback"
         }
         scheduleRGBRefreshIfNeeded()
+    }
+
+    func requestCurrentRGBRefreshAfterWrite() {
+        requestCurrentRGBRefresh()
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            self.requestCurrentRGBRefresh()
+        }
     }
 
     func readCurrentRGBReadbackForUserAction() async throws -> [RGBLightReadback] {
