@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device.config>
+ <Language.info>
+  <Language LCID="2052" init="0"/>
+ </Language.info>
+ <Singledevice.info>
+  <device identify="RKGK890" name="" type= "1" vid="05AC" pid="024F" product_name="USB DEVICE" image_none="singledevice_keyboardK870T_none.png" image="singledevice_keyboardK870T.png" />
+ </Singledevice.info>
+</device.config>

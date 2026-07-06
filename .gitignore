@@ -1,0 +1,5 @@
+.build/
+dist/
+extracted/
+.DS_Store
+*.hex
