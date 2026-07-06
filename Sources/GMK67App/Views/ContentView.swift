@@ -6,22 +6,8 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedPage) {
-                Section {
-                    ForEach(AppPage.userPages) { page in
-                        NavigationLink(value: page) {
-                            Label(page.title, systemImage: page.systemImage)
-                        }
-                    }
-                }
-
-                Section("Developer") {
-                    NavigationLink(value: AppPage.developer) {
-                        Label(AppPage.developer.title, systemImage: AppPage.developer.systemImage)
-                    }
-                }
-            }
-            .navigationTitle("GMK67")
+            SidebarView(selectedPage: $selectedPage)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
         } detail: {
             VStack(spacing: 0) {
                 DeviceStatusBanner(model: model)
@@ -29,27 +15,32 @@ struct ContentView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
-                VStack(spacing: 0) {
-                    VisualKeyboardView(model: model)
-                        .padding(.horizontal, 18)
-                        .frame(maxHeight: .infinity)
+                GeometryReader { geometry in
+                    let keyboardHeight = geometry.size.height * 0.5
 
-                    Divider()
-                        .padding(.horizontal, 18)
+                    VStack(spacing: 0) {
+                        VisualKeyboardView(model: model)
+                            .padding(.horizontal, 18)
+                            .frame(height: keyboardHeight)
 
-                    ScrollView {
-                        pageSettings(for: selectedPage ?? .rgb)
-                            .padding(18)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Divider()
+                            .padding(.horizontal, 18)
+
+                        ScrollView {
+                            pageSettings(for: selectedPage ?? .rgb)
+                                .padding(18)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(height: geometry.size.height - keyboardHeight)
                     }
-                    .frame(maxHeight: .infinity)
                 }
-                .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 ConsoleView(text: model.output, isRunning: model.isRunning) {
                     model.clearOutput()
                 }
             }
+            .navigationTitle("GMK67")
         }
         .task {
             model.refreshDeviceStatusIfNeeded()
