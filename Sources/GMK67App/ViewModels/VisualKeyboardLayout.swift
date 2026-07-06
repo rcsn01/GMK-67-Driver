@@ -136,6 +136,8 @@ private let inputNameToVisualKeySpec: [String: String] = {
         ("?", "slash"),
         ("left-control", "control"),
         ("left-ctrl", "control"),
+        ("right-control", "control"),
+        ("right-ctrl", "control"),
         ("control", "control"),
         ("ctrl", "control"),
         ("left-shift", "0x49"),
@@ -146,10 +148,14 @@ private let inputNameToVisualKeySpec: [String: String] = {
         ("right-option", "0x5F"),
         ("left-command", "win"),
         ("left-cmd", "win"),
+        ("right-command", "win"),
+        ("right-cmd", "win"),
         ("command", "win"),
         ("cmd", "win")
     ]
-    return Dictionary(uniqueKeysWithValues: pairs.map { (specKeyToken($0.0), $0.1) })
+    return pairs.reduce(into: [:]) { aliases, pair in
+        aliases[specKeyToken(pair.0)] = pair.1
+    }
 }()
 
 func visualKeySpec(forInputName name: String) -> String? {

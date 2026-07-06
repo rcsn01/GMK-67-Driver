@@ -394,17 +394,6 @@ func parseRawByteAssignmentSpec(_ spec: String, maxOffset: Int, kind: String) th
     return ByteAssignment(index: offset, label: String(format: "0x%02X", offset), value: value)
 }
 
-func parseRawByteAssignmentSpecs(_ specs: [String], maxOffset: Int, kind: String) throws -> [ByteAssignment] {
-    let assignments = try specs.map { try parseRawByteAssignmentSpec($0, maxOffset: maxOffset, kind: kind) }
-    var seenOffsets = Set<Int>()
-    for assignment in assignments {
-        guard seenOffsets.insert(assignment.index).inserted else {
-            throw DriverError.invalidArgument("Duplicate \(kind) byte offset in assignment list: \(assignment.label)")
-        }
-    }
-    return assignments
-}
-
 let keyboardSettingsKnownFields: [(name: String, offset: Int, windowsKey: String)] = [
     ("gamemode", 0x01, "gamemode"),
     ("disable-alttab", 0x02, "disable_alttab"),

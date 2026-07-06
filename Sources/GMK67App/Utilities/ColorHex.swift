@@ -64,20 +64,3 @@ func displayRGBHex(fromHardwareReadback hex: String) -> String? {
     blue = min(255, blue * scale)
     return String(format: "%02X%02X%02X", Int(red.rounded()), Int(green.rounded()), Int(blue.rounded()))
 }
-
-func colorForKey(_ key: String, in specs: String) -> String? {
-    valueForSpecKey(key, in: specs).flatMap { value in
-        normalizedRGBHex(value)
-    }
-}
-
-func visualColorForKey(_ key: String, in specs: String, fillHex: String) -> String? {
-    if let explicit = colorForKey(key, in: specs) {
-        return explicit
-    }
-
-    guard let fill = normalizedRGBHex(fillHex), fill != "000000" else {
-        return nil
-    }
-    return fill
-}

@@ -51,22 +51,6 @@ extension DriverModel {
         }
     }
 
-    func applyKeymapProfile() {
-        guard unsafeKeymapWrites else {
-            append("Enable unsafe keymap writes before applying a keymap profile. Keymap backup/readback is not proven yet.")
-            return
-        }
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in
-                self.runLiveHID(["keymap-file-apply", url.path, "--unsafe-no-backup"], title: "Apply keymap profile")
-            }
-        }
-    }
-
     func exportKeymapPresetProfile() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(keymapPresetName)-keymap.hex"
