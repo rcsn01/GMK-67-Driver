@@ -106,9 +106,10 @@ Keep the terminal CLI available for scripting and reverse-engineering work; the
 app is a GUI wrapper around the same driver executable.
 
 On first launch, use the status banner at the top of the app. If it shows
-`Permission needed`, grant Input Monitoring permission to `GMK67.app` in System
-Settings, then quit and reopen the app and reconnect the keyboard. macOS blocks
-live RGB and keymap HID writes until that permission is granted.
+`Permission needed`, use the app's **Permission** button so the bundled `gmk67`
+helper requests Input Monitoring. Then enable the entry macOS shows in System
+Settings, quit and reopen the app, and reconnect the keyboard. macOS blocks live
+RGB and keymap HID writes until the process that opens HID has that permission.
 
 The app keeps offline actions available while permission is missing: create,
 load, preview, export, validate, and library operations still work. Live HID
@@ -357,9 +358,14 @@ List, export, or apply built-in RGB lighting presets:
 .build/debug/gmk67 rgb-preset-apply wasd
 ```
 
-Built-in RGB presets currently include `off`, `white`, `red`, `blue`, `wasd`,
-`arrows`, `coding`, `rainbow`, `ocean`, and `sunset`. Applying a preset uses
-the proven RGB table write path and saves an automatic pre-write backup.
+Built-in RGB presets currently include `off`, `white`, `red`, `blue`, `green`,
+`purple`, `cyan`, `orange`, `pink`, `gold`, `wasd`, `arrows`, `coding`,
+`rainbow`, `ocean`, `sunset`, `fire`, `ice`, `forest`, `matrix`, `aurora`,
+`cyberpunk`, `pastel`, and `lava`. Applying a preset uses the proven RGB table
+write path and saves an automatic pre-write backup.
+
+The app's One-Click RGB Presets panel exposes the same proven solid-color and
+theme presets as single buttons.
 
 Create a combined keyboard profile that stores both a lighting preset and a
 keymap preset:
@@ -687,6 +693,9 @@ Implemented:
   selector-03 path, including named candidate presets.
 - Windows-named candidate lighting-effect exports for the selector-03 table
   path, surfaced in the app Lighting panel.
+- `effect-list` for the Windows-named experimental lighting-effect aliases.
+  Live animated effect selection is still not proven as a high-level firmware
+  command.
 - Offline alternate full-table sequence export/validation for the `04 27`
   path.
 - Guarded apply commands for validated candidate lighting/full-table sequences.
@@ -718,12 +727,12 @@ host app in System Settings, then unplug/replug the GMK67 and retry:
 .build/debug/gmk67 feature-get 00 64
 ```
 
-When using `GMK67.app`, grant Input Monitoring permission to the app if macOS
-prompts or if app commands report `not permitted`. The bundled helper is inside
-`GMK67.app/Contents/Resources/Helper/gmk67`, so macOS may show either the app
-or the helper depending on how TCC attributes the HID open. The app's Device
-panel has **Permission** and **Settings** buttons to request Input Monitoring
-access and open the correct System Settings pane.
+When using `GMK67.app`, use the app's **Permission** button first. It runs the
+bundled helper's `permission-request` command, which makes macOS attribute the
+request to the same executable that later opens HID. The bundled helper is inside
+`GMK67.app/Contents/Resources/Helper/gmk67`, so macOS may show either the app or
+the helper depending on how TCC attributes the HID open. The app's Device panel
+also has a **Settings** button to open the Input Monitoring pane.
 
 ## Reverse Engineering Notes
 
