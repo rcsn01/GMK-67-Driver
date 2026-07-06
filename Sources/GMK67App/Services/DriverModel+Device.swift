@@ -6,14 +6,15 @@ extension DriverModel {
     func refreshDeviceStatusIfNeeded() {
         guard !didAutoRefreshDeviceStatus else { return }
         didAutoRefreshDeviceStatus = true
-        refreshDeviceStatus(announce: false)
+        refreshDeviceStatus(announce: false, openCheck: false)
     }
 
-    func refreshDeviceStatus(announce: Bool = true) {
+    func refreshDeviceStatus(announce: Bool = true, openCheck: Bool = true) {
         deviceStatusKind = .checking
         deviceStatusTitle = "Checking keyboard"
         deviceStatusDetail = "Reading USB and macOS permission status."
-        runCapture(["readiness", "--open-check"], title: announce ? "Driver readiness" : nil) { text, status in
+        let arguments = openCheck ? ["readiness", "--open-check"] : ["readiness"]
+        runCapture(arguments, title: announce ? "Driver readiness" : nil) { text, status in
             self.updateDeviceStatus(from: text, exitStatus: status)
             if announce, !text.isEmpty {
                 self.append(text)
@@ -30,7 +31,7 @@ extension DriverModel {
         if text.contains("Overall: READY") {
             deviceStatusKind = .ready
             deviceStatusTitle = "Keyboard ready"
-            deviceStatusDetail = "USB and Input Monitoring permission are available for live RGB and keymap writes."
+            deviceStatusDetail = "USB and Input Monitoring permission are available for RGB, keymap, and profile operations."
             return
         }
 
@@ -57,7 +58,7 @@ extension DriverModel {
         runCapture(["permission-request"], title: "macOS Input Monitoring permission") { text, status in
             guard status == 0 else { return }
             if text.contains("Current status: GRANTED") || text.contains("Request result: GRANTED") {
-                self.refreshDeviceStatus(announce: false)
+                self.refreshDeviceStatus(announce: false, openCheck: false)
             } else {
                 self.openInputMonitoringSettings()
             }

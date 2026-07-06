@@ -50,7 +50,7 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSInputMonitoringUsageDescription</key>
-    <string>GMK67 needs Input Monitoring permission to open the keyboard USB HID interface for RGB lighting and key remapping.</string>
+    <string>GMK67 needs Input Monitoring permission to access the keyboard USB HID interface for RGB, keymap, and profile operations.</string>
 </dict>
 </plist>
 PLIST

@@ -61,11 +61,12 @@ final class DriverModel: ObservableObject {
     @Published var keymapLibraryEntries: [AppKeymapLibraryEntry] = []
     @Published var macroLibraryEntries: [AppMacroLibraryEntry] = []
     var didAutoRefreshDeviceStatus = false
-    private var rgbPollTask: Task<Void, Never>?
-    private var keyInputMonitor: GMK67KeyInputMonitor?
-    private var isLiveRGBReadInFlight = false
+    private var keyInputMonitor: ReadOnlyKeyInputMonitor?
+    private var rgbRefreshTask: Task<Void, Never>?
     private var pendingRGBRefresh = false
-    private var liveMonitoringGeneration = 0
+    private var pendingRGBRefreshAnnounce = false
+    private var lastKeyInputAt = Date.distantPast
+    private var isLiveRGBReadInFlight = false
 
     var appExecutablePath: String? {
         Bundle.main.executableURL?.path
@@ -229,25 +230,23 @@ extension DriverModel {
             return
         }
 
-        let wasStopped = rgbPollTask == nil && keyInputMonitor == nil
-        if wasStopped {
-            liveMonitoringGeneration += 1
+        if !currentRGBReadbackLoaded {
             clearCurrentRGBReadback(status: "Waiting for hardware RGB readback")
         }
-
         startKeyInputMonitoring()
-        startRGBPollingIfNeeded()
+        lastKeyInputAt = Date()
+        pressedVisualKeys = []
         requestCurrentRGBRefresh()
     }
 
     func stopLiveMonitoring(rgbStatus: String = "Current RGB unavailable") {
-        liveMonitoringGeneration += 1
-        rgbPollTask?.cancel()
-        rgbPollTask = nil
+        rgbRefreshTask?.cancel()
+        rgbRefreshTask = nil
+        pendingRGBRefresh = false
+        pendingRGBRefreshAnnounce = false
         keyInputMonitor?.stop()
         keyInputMonitor = nil
         isLiveRGBReadInFlight = false
-        pendingRGBRefresh = false
         clearCurrentRGBReadback(status: rgbStatus)
         pressedVisualKeys = []
         lastKeyStatus = "No keys pressed"
@@ -262,46 +261,34 @@ extension DriverModel {
     }
 
     func requestCurrentRGBRefresh(announce: Bool = false) {
-        Task { @MainActor in
-            await refreshCurrentRGBPreview(announce: announce, force: true)
+        guard deviceStatusKind == .ready else {
+            clearCurrentRGBReadback(status: "Current RGB unavailable")
+            return
         }
-    }
-
-    func readCurrentRGBReadbackForApp() async throws -> [RGBLightReadback] {
-        try await Task.detached(priority: .utility) {
-            try readCurrentRGBReadback(writeIndex: 0, readIndex: 0, chunks: 9)
-        }.value
+        pendingRGBRefresh = true
+        pendingRGBRefreshAnnounce = pendingRGBRefreshAnnounce || announce
+        if !currentRGBReadbackLoaded {
+            currentRGBStatus = "Waiting for hardware RGB readback"
+        }
+        scheduleRGBRefreshIfNeeded()
     }
 
     func readCurrentRGBReadbackForUserAction() async throws -> [RGBLightReadback] {
         while isLiveRGBReadInFlight {
             try await Task.sleep(nanoseconds: 50_000_000)
         }
+        await waitForKeyInputIdle()
         isLiveRGBReadInFlight = true
         defer { isLiveRGBReadInFlight = false }
-        return try await readCurrentRGBReadbackForApp()
-    }
-
-    private func startRGBPollingIfNeeded() {
-        guard rgbPollTask == nil else { return }
-
-        rgbPollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                await self.refreshCurrentRGBPreview(announce: false, force: false)
-                do {
-                    try await Task.sleep(nanoseconds: 1_000_000_000)
-                } catch {
-                    return
-                }
-            }
-        }
+        return try await Task.detached(priority: .utility) {
+            try readCurrentRGBReadback(writeIndex: 0, readIndex: 0, chunks: 9)
+        }.value
     }
 
     private func startKeyInputMonitoring() {
         guard keyInputMonitor == nil else { return }
 
-        let monitor = GMK67KeyInputMonitor { [weak self] pressedKeys in
+        let monitor = ReadOnlyKeyInputMonitor { [weak self] pressedKeys in
             Task { @MainActor in
                 self?.updatePressedVisualKeys(fromInputNames: pressedKeys)
             }
@@ -315,51 +302,82 @@ extension DriverModel {
         } catch {
             keyInputMonitor = nil
             pressedVisualKeys = []
-            lastKeyStatus = "Key monitor unavailable"
+            lastKeyStatus = "Read-only key preview unavailable"
             append("Key monitor unavailable: \(error)")
         }
     }
 
-    private func refreshCurrentRGBPreview(announce: Bool, force: Bool) async {
-        guard deviceStatusKind == .ready else {
-            if deviceStatusKind != .checking {
-                clearCurrentRGBReadback(status: "Current RGB unavailable")
+    private func scheduleRGBRefreshIfNeeded() {
+        guard rgbRefreshTask == nil else { return }
+
+        rgbRefreshTask = Task { @MainActor in
+            defer { self.rgbRefreshTask = nil }
+            while self.pendingRGBRefresh, !Task.isCancelled {
+                self.pendingRGBRefresh = false
+                let announce = self.pendingRGBRefreshAnnounce
+                self.pendingRGBRefreshAnnounce = false
+                await self.refreshCurrentRGBPreviewWhenIdle(announce: announce)
             }
+        }
+    }
+
+    private func refreshCurrentRGBPreviewWhenIdle(announce: Bool) async {
+        guard deviceStatusKind == .ready else {
+            clearCurrentRGBReadback(status: "Current RGB unavailable")
             return
         }
-        guard !isRunning else { return }
-        guard !isLiveRGBReadInFlight else {
-            pendingRGBRefresh = pendingRGBRefresh || force
+        guard !isRunning else {
+            pendingRGBRefresh = true
+            try? await Task.sleep(nanoseconds: 200_000_000)
             return
         }
 
-        let generation = liveMonitoringGeneration
+        await waitForKeyInputIdle()
+        guard deviceStatusKind == .ready, !isRunning, !Task.isCancelled else { return }
+        guard !isLiveRGBReadInFlight else {
+            pendingRGBRefresh = true
+            return
+        }
+
         isLiveRGBReadInFlight = true
         if !currentRGBReadbackLoaded {
             currentRGBStatus = "Reading current RGB..."
         }
 
         do {
-            let readback = try await readCurrentRGBReadbackForApp()
+            let readback = try await Task.detached(priority: .utility) {
+                try readCurrentRGBReadback(writeIndex: 0, readIndex: 0, chunks: 9)
+            }.value
             isLiveRGBReadInFlight = false
-            guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }
+            guard deviceStatusKind == .ready, !Task.isCancelled else { return }
             loadRGBReadbackIntoCurrentPreview(readback, announce: announce)
         } catch {
             isLiveRGBReadInFlight = false
-            guard generation == liveMonitoringGeneration, deviceStatusKind == .ready else { return }
+            guard deviceStatusKind == .ready, !Task.isCancelled else { return }
             clearCurrentRGBReadback(status: "Current RGB read failed")
             if announce {
                 append("Current RGB read failed: \(error)")
             }
         }
+    }
 
-        if pendingRGBRefresh {
-            pendingRGBRefresh = false
-            await refreshCurrentRGBPreview(announce: false, force: true)
+    private func waitForKeyInputIdle() async {
+        while !Task.isCancelled {
+            let idleTime = Date().timeIntervalSince(lastKeyInputAt)
+            if pressedVisualKeys.isEmpty, idleTime >= 0.75 {
+                return
+            }
+            if currentRGBReadbackLoaded {
+                currentRGBStatus = "Current RGB: paused while typing"
+            } else {
+                currentRGBStatus = "Waiting for typing to pause"
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
         }
     }
 
     private func updatePressedVisualKeys(fromInputNames inputNames: Set<String>) {
+        lastKeyInputAt = Date()
         let visualKeys = Set(inputNames.compactMap { visualKeySpec(forInputName: $0) })
         pressedVisualKeys = visualKeys
         lastKeyStatus = visualKeyStatusText(for: visualKeys)
