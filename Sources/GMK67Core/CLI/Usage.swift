@@ -23,7 +23,7 @@ func printUsage() {
       doctor [--open-check]
           Run read-only resource, protocol, and USB HID diagnostics.
 
-      readiness [--open-check]
+      readiness [--open-check] [--json]
           Print a concise driver/app readiness report without sending HID reports.
 
       protocol-candidates

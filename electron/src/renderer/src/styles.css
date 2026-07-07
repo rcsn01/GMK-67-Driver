@@ -1,0 +1,554 @@
+:root {
+  color: #202420;
+  background: #f5f6f3;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 980px;
+  min-height: 660px;
+  background: #f5f6f3;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 34px;
+  border: 1px solid #c7cdc4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202420;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #c7cdc4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202420;
+  padding: 8px 10px;
+  outline: none;
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.appShell {
+  display: grid;
+  grid-template-columns: 216px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #1f2a2b;
+  color: #edf2ef;
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px;
+}
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #2fb39d;
+  color: #061311;
+  font-weight: 800;
+}
+
+.brand h1,
+.brand p,
+.panel h2,
+.panel p,
+.consoleDrawer h2,
+.consoleDrawer p,
+.statusBanner h2,
+.statusBanner p {
+  margin: 0;
+}
+
+.brand h1 {
+  font-size: 19px;
+  letter-spacing: 0;
+}
+
+.brand p {
+  color: #a9b9b4;
+  font-size: 13px;
+}
+
+nav {
+  display: grid;
+  gap: 6px;
+}
+
+nav button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  height: 38px;
+  border-color: transparent;
+  background: transparent;
+  color: #dbe5e1;
+  padding: 0 10px;
+}
+
+nav button.active,
+nav button:hover {
+  background: #314143;
+  color: #ffffff;
+}
+
+.toggle {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #dbe5e1;
+  font-size: 13px;
+}
+
+.toggle input {
+  width: auto;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.statusBanner {
+  display: grid;
+  grid-template-columns: 44px 1fr auto auto auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 78px;
+  border: 1px solid #cfd7d0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.statusBanner.ready {
+  border-left: 5px solid #2fb39d;
+}
+
+.statusBanner.warning {
+  border-left: 5px solid #c99a2e;
+}
+
+.statusBanner.blocked {
+  border-left: 5px solid #c85f4b;
+}
+
+.statusIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #eef2ef;
+}
+
+.statusBanner h2,
+.panel h2,
+.consoleDrawer h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.statusBanner p,
+.panel p,
+.consoleDrawer p {
+  margin-top: 4px;
+  color: #65716a;
+  font-size: 13px;
+}
+
+.statusFacts {
+  display: flex;
+  gap: 8px;
+}
+
+.statusFacts span,
+.messageStrip {
+  border-radius: 6px;
+  background: #eef2ef;
+  padding: 7px 9px;
+  color: #405047;
+  font-size: 12px;
+}
+
+.primaryButton,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primaryButton {
+  background: #2fb39d;
+  border-color: #269784;
+  color: #061311;
+  font-weight: 700;
+  padding: 0 12px;
+}
+
+.iconButton {
+  width: 34px;
+  padding: 0;
+}
+
+.messageStrip {
+  margin-top: 12px;
+  max-height: 64px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.mainGrid {
+  flex: 1;
+  min-height: 0;
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.workArea {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  height: 100%;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.panel {
+  border: 1px solid #cfd7d0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.keyboard {
+  display: grid;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 12px;
+}
+
+.keyboardRow {
+  display: flex;
+  gap: 6px;
+}
+
+.keyButton {
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 6px;
+  color: #1b211f;
+  font-size: 11px;
+  text-transform: uppercase;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.keyButton small {
+  display: block;
+  color: #1b6258;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keyButton.selected {
+  border-color: #2fb39d;
+  box-shadow: 0 0 0 2px rgba(47, 179, 157, 0.22);
+}
+
+.keyButton.remapped {
+  border-color: #2fb39d;
+  background: #e8f7f3;
+}
+
+.keyButton.fnSource {
+  border-color: #c99a2e;
+  box-shadow: 0 0 0 2px rgba(201, 154, 46, 0.2);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.formGrid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profileControls {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.4fr) minmax(140px, 0.7fr) minmax(200px, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.keymapWorkspace {
+  gap: 12px;
+}
+
+.keymapToolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.segmentedControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #c7cdc4;
+  border-radius: 7px;
+  background: #eef2ef;
+  padding: 3px;
+}
+
+.segmentedControl button {
+  min-height: 30px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.segmentedControl button.active {
+  background: #2fb39d;
+  border-color: #269784;
+  color: #061311;
+}
+
+.keymapNotice {
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: #eef2ef;
+  color: #405047;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.keymapEditGrid {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1fr) auto auto;
+  align-items: end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mappingCard {
+  min-height: 64px;
+  border: 1px solid #e0e6e1;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.mappingCard span {
+  color: #65716a;
+  font-size: 12px;
+}
+
+.mappingCard strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.mappingCard p {
+  margin-top: 4px;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+label,
+.stacked {
+  display: grid;
+  gap: 6px;
+  color: #49544f;
+  font-size: 12px;
+}
+
+.stacked {
+  margin-top: 12px;
+}
+
+.consoleDrawer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex: 0 0 auto;
+  margin-top: 12px;
+  border: 1px solid #cfd7d0;
+  border-radius: 8px 8px 0 0;
+  background: #ffffff;
+  box-shadow: 0 -8px 20px rgba(24, 33, 33, 0.08);
+  overflow: hidden;
+}
+
+.consoleToggle {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 8px 14px;
+  text-align: left;
+}
+
+.consoleBody {
+  height: min(40vh, 360px);
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid #e0e6e1;
+  padding: 10px 14px 14px;
+}
+
+.consoleActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.consoleOutput {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  border-radius: 6px;
+  background: #182121;
+  color: #dce9e5;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.libraryList,
+.editorStack {
+  display: grid;
+  gap: 10px;
+}
+
+.libraryRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e0e6e1;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.libraryRow span {
+  display: inline-block;
+  margin-left: 8px;
+  color: #65716a;
+  font-size: 12px;
+}
+
+.libraryRow p {
+  margin: 4px 0 0;
+}
+
+.emptyState {
+  border: 1px dashed #cfd7d0;
+  border-radius: 8px;
+  color: #65716a;
+  padding: 18px;
+  text-align: center;
+}
+
+.deviceGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.metric {
+  border: 1px solid #e0e6e1;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.metric span {
+  display: block;
+  color: #65716a;
+  font-size: 12px;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+}

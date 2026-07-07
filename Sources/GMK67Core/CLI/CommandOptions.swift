@@ -2564,6 +2564,144 @@ func readinessReport(openCheck: Bool) -> String {
     return lines.joined(separator: "\n") + "\n"
 }
 
+struct ReadinessDeviceJSON: Codable {
+    let index: Int
+    let kind: String
+    let maxFeatureReportSize: Int
+    let maxInputReportSize: Int
+    let maxOutputReportSize: Int
+    let primaryUsagePage: String
+    let primaryUsage: String
+    let usagePage: String
+    let usage: String
+}
+
+struct ReadinessReportJSON: Codable {
+    let status: String
+    let openCheck: Bool
+    let resourcesOK: Bool
+    let layoutKeyCount: Int?
+    let mappedPhysicalRGBKeyCount: Int?
+    let offlineEncodersOK: Bool
+    let usbDeviceOK: Bool
+    let configurationInterfaceOK: Bool
+    let likelyConfigurationIndices: [Int]
+    let inputMonitoringGranted: Bool
+    let hidOpenPermission: String
+    let hidOpenIndex: Int?
+    let devices: [ReadinessDeviceJSON]
+    let warnings: [String]
+    let failures: [String]
+}
+
+func readinessReportPayload(openCheck: Bool) -> ReadinessReportJSON {
+    var failures: [String] = []
+    var warnings: [String] = []
+    var resourcesOK = false
+    var layoutKeyCount: Int?
+    var mappedPhysicalRGBKeyCount: Int?
+    var offlineEncodersOK = false
+    let inputMonitoringGranted = CGPreflightListenEventAccess()
+
+    do {
+        let keys = try loadKeyboardLayout()
+        resourcesOK = true
+        layoutKeyCount = keys.count
+        mappedPhysicalRGBKeyCount = physicalKeysByLightIndex().count
+    } catch {
+        failures.append("vendor layout resources are unavailable: \(error)")
+    }
+
+    do {
+        try runSelfTest(verbose: false)
+        offlineEncodersOK = true
+    } catch {
+        failures.append("offline protocol encoders failed self-test: \(error)")
+    }
+
+    let driver = HIDDriver()
+    let foundDevices = driver.devices()
+    let devices = foundDevices.enumerated().map { index, info in
+        ReadinessDeviceJSON(
+            index: index,
+            kind: info.isLikelyConfigurationInterface ? "config" : "hid",
+            maxFeatureReportSize: info.maxFeatureReportSize,
+            maxInputReportSize: info.maxInputReportSize,
+            maxOutputReportSize: info.maxOutputReportSize,
+            primaryUsagePage: String(format: "%04X", info.primaryUsagePage),
+            primaryUsage: String(format: "%04X", info.primaryUsage),
+            usagePage: String(format: "%04X", info.usagePage),
+            usage: String(format: "%04X", info.usage)
+        )
+    }
+
+    if foundDevices.isEmpty {
+        warnings.append("keyboard is not currently visible over wired USB")
+    }
+
+    let likelyIndices = foundDevices.enumerated()
+        .filter { $0.element.isLikelyConfigurationInterface }
+        .map(\.offset)
+    if !foundDevices.isEmpty && likelyIndices.isEmpty {
+        warnings.append("no likely 64-byte/vendor configuration interface was detected")
+    }
+
+    var hidOpenPermission = openCheck ? "skipped" : "not-requested"
+    var hidOpenIndex: Int?
+    if openCheck {
+        if let index = likelyIndices.first {
+            do {
+                _ = try driver.device(at: index, configurationOnly: false)
+                hidOpenPermission = "ok"
+                hidOpenIndex = index
+            } catch {
+                hidOpenPermission = "failed"
+                if inputMonitoringGranted {
+                    warnings.append("Input Monitoring preflight is granted but IOHID open is still denied: \(error)")
+                } else {
+                    warnings.append("macOS may need Input Monitoring permission for the terminal/app: \(error)")
+                }
+            }
+        } else {
+            hidOpenPermission = "skipped"
+        }
+    }
+
+    let status: String
+    if failures.isEmpty && warnings.isEmpty {
+        status = openCheck ? "ready" : "ready-open-check-skipped"
+    } else if failures.isEmpty {
+        status = "partial"
+    } else {
+        status = "not-ready"
+    }
+
+    return ReadinessReportJSON(
+        status: status,
+        openCheck: openCheck,
+        resourcesOK: resourcesOK,
+        layoutKeyCount: layoutKeyCount,
+        mappedPhysicalRGBKeyCount: mappedPhysicalRGBKeyCount,
+        offlineEncodersOK: offlineEncodersOK,
+        usbDeviceOK: !foundDevices.isEmpty,
+        configurationInterfaceOK: !likelyIndices.isEmpty,
+        likelyConfigurationIndices: likelyIndices,
+        inputMonitoringGranted: inputMonitoringGranted,
+        hidOpenPermission: hidOpenPermission,
+        hidOpenIndex: hidOpenIndex,
+        devices: devices,
+        warnings: warnings,
+        failures: failures
+    )
+}
+
+func printReadinessReportJSON(openCheck: Bool) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    let data = try encoder.encode(readinessReportPayload(openCheck: openCheck))
+    print(String(data: data, encoding: .utf8) ?? "{}")
+}
+
 func printProtocolCandidates() {
     print(protocolCandidatesText())
 }

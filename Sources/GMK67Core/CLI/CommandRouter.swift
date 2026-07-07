@@ -48,11 +48,18 @@ func run(_ args: [String]) throws {
         try runDoctor(openCheck: args.contains("--open-check"))
 
     case "readiness":
-        guard args.count == 2 || (args.count == 3 && args[2] == "--open-check") else {
+        let readinessArgs = Array(args.dropFirst(2))
+        let allowedReadinessArgs = Set(["--open-check", "--json"])
+        guard readinessArgs.allSatisfy({ allowedReadinessArgs.contains($0) }) else {
             printUsage()
             return
         }
-        print(readinessReport(openCheck: args.contains("--open-check")), terminator: "")
+        let openCheck = readinessArgs.contains("--open-check")
+        if readinessArgs.contains("--json") {
+            try printReadinessReportJSON(openCheck: openCheck)
+        } else {
+            print(readinessReport(openCheck: openCheck), terminator: "")
+        }
 
     case "protocol-candidates":
         guard args.count == 2 else {

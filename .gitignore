@@ -1,4 +1,9 @@
 .build/
+electron/node_modules/
+electron/.vite/
+electron/out/
+electron/dist/
+electron/assets/bin/
 dist/
 extracted/
 .tmp/
