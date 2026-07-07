@@ -103,6 +103,13 @@ struct LightingEffectDefinition {
     let name: String
     let title: String
     let value: UInt8
+    let colorType: UInt8
+    let red: UInt8
+    let green: UInt8
+    let blue: UInt8
+    let byte5: UInt8
+    let byte6: UInt8
+    let byte7: UInt8
     var aliases: [String] = []
     var summary: String = ""
 }

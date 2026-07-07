@@ -41,6 +41,8 @@ final class DriverModel: ObservableObject {
     @Published var lightingModeSpecs = "W=01 A=02 S=03 D=04"
     @Published var lightingModePresetName = "wasd-steps"
     @Published var lightingEffectName = "breath"
+    @Published var lightingEffectColor = Color.white
+    @Published var lightingEffectColorHex = "FFFFFF"
     @Published var macroName = "Combo"
     @Published var macroRepeatCount = "1"
     @Published var macroEventSpecs = "down:control key:C up:control delay:50"

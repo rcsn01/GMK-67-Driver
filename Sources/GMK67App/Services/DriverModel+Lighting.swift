@@ -136,10 +136,10 @@ extension DriverModel {
 
     func applyLightingModePreset() {
         guard unsafeKeymapWrites else {
-            append("Enable unsafe candidate writes before applying a lighting-mode preset. Lighting readback/backup is not proven yet.")
+            append("Enable unsafe lighting writes before applying a lighting test pattern. Lighting readback/backup is not proven yet.")
             return
         }
-        runLiveHID(["lighting-mode-preset-apply", lightingModePresetName, "--unsafe-no-backup"], title: "Apply lighting mode preset")
+        runLiveHID(["lighting-mode-preset-apply", lightingModePresetName, "--unsafe-no-backup"], title: "Apply lighting test pattern")
     }
 
     func exportLightingEffectProfile() {
@@ -149,17 +149,19 @@ extension DriverModel {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in
-                self.run(["lighting-effect-export", url.path, self.lightingEffectName], title: "Export lighting effect")
+                let sanitizedColor = normalizedRGBHex(self.lightingEffectColorHex) ?? "FFFFFF"
+                self.lightingEffectColorHex = sanitizedColor
+                self.lightingEffectColor = colorFromHex(sanitizedColor)
+                self.run(["lighting-effect-export", url.path, self.lightingEffectName, sanitizedColor], title: "Export lighting effect")
             }
         }
     }
 
     func applyLightingEffect() {
-        guard unsafeKeymapWrites else {
-            append("Enable unsafe candidate writes before applying a lighting effect. Lighting readback/backup is not proven yet.")
-            return
-        }
-        runLiveHID(["lighting-effect-apply", lightingEffectName, "--unsafe-no-backup"], title: "Apply lighting effect")
+        let sanitizedColor = normalizedRGBHex(lightingEffectColorHex) ?? "FFFFFF"
+        lightingEffectColorHex = sanitizedColor
+        lightingEffectColor = colorFromHex(sanitizedColor)
+        runLiveHID(["lighting-effect-apply", lightingEffectName, sanitizedColor], title: "Apply built-in lighting effect")
     }
 
     func applyLightingModeProfile() {

@@ -29,12 +29,17 @@ extension DriverModel {
         mapSpecs = upsertSpec(mapSpecs, key: key, value: sanitizedColor)
         keyName = key
         combinedProfileIncludesRGBMap = true
+        runRGBWrite(["rgb-set-key", key, sanitizedColor], title: "Set selected key color")
     }
 
     func clearSelectedKeyColor() {
         let key = selectedVisualKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         mapSpecs = removeSpec(mapSpecs, key: key)
+        colorHex = "000000"
+        keyColor = .black
+        keyName = key
+        runRGBWrite(["rgb-set-key", key, "000000"], title: "Clear selected key color")
     }
 
     func assignSelectedKeyRemap() {

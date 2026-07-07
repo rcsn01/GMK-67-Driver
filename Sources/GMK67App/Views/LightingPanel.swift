@@ -2,11 +2,10 @@ import SwiftUI
 
 struct LightingPanel: View {
     @ObservedObject var model: DriverModel
-    private let lightingEffects = [
+    private let builtInLightingEffects = [
         "static", "single-on", "single-off", "glittering", "falling", "colourful",
         "breath", "spectrum", "outward", "scrolling", "rolling", "rotating",
-        "explode", "launch", "ripples", "flowing", "pulsating", "tilt",
-        "shuttle", "led-off", "inwards", "floweriness"
+        "explode", "launch", "ripples", "flowing", "pulsating", "tilt", "shuttle", "led-off"
     ]
     private let lightingModePresets = ["empty", "wasd-steps", "nav-steps", "row-steps"]
 
@@ -42,14 +41,27 @@ struct LightingPanel: View {
                 }
 
                 HStack {
-                    Text("Effect Preset")
+                    Text("Built-in Effect")
                     Picker("", selection: $model.lightingEffectName) {
-                        ForEach(lightingEffects, id: \.self) { effect in
+                        ForEach(builtInLightingEffects, id: \.self) { effect in
                             Text(effect).tag(effect)
                         }
                     }
                     .labelsHidden()
                     .frame(width: 160)
+                    Text("Color")
+                    ColorPicker("", selection: Binding(
+                        get: { model.lightingEffectColor },
+                        set: {
+                            model.lightingEffectColor = $0
+                            model.lightingEffectColorHex = rgbHex($0)
+                        }
+                    ), supportsOpacity: false)
+                    .labelsHidden()
+                    .frame(width: 44)
+                    TextField("FFFFFF", text: $model.lightingEffectColorHex)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
                     CommandButton("Export", systemImage: "doc.badge.plus") {
                         model.exportLightingEffectProfile()
                     }
@@ -59,7 +71,7 @@ struct LightingPanel: View {
                 }
 
                 HStack {
-                    Text("Mode Preset")
+                    Text("Test Pattern")
                     Picker("", selection: $model.lightingModePresetName) {
                         ForEach(lightingModePresets, id: \.self) { preset in
                             Text(preset).tag(preset)
@@ -96,7 +108,7 @@ struct LightingPanel: View {
                 Toggle("Allow unsafe lighting writes", isOn: $model.unsafeKeymapWrites)
                     .toggleStyle(.checkbox)
 
-                Text("Candidate lighting writes require the unsafe toggle because lighting readback/backup is not proven yet.")
+                Text("Custom lighting profiles and test-pattern writes require the unsafe toggle. Built-in effects use the confirmed mode+color path.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.deviceStatusKind != .ready {

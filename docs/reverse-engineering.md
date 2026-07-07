@@ -216,7 +216,11 @@ Keymap candidates:
   8 set to `03` or `09`, sends a large table, then finishes with `04 02` and
   `04 F0`.
 - Another short operation near `0x41db30` sends `04 18`, `04 13`, a single
-  command payload, then `04 02` and `04 F0`.
+  command payload, then `04 02` and `04 F0`. This is the native built-in
+  lighting effect apply path. It reads the selected `t_light_data` row and
+  writes payload byte 0 as `mode`, bytes 1...3 as `byte2...byte4` RGB, byte 8
+  as `colortype`, bytes 9...10 as `byte6 + 1` and `byte7 + 1`, byte 11 as
+  `byte5`, and `AA 55` at payload offsets `0x0E...0x0F`.
 - A related helper at `0x41E050` uses the same `04 13` sequence, sets payload
   byte 0 to `80`, bytes 9...10 to `0F 0F`, and writes the same `AA 55` marker at
   payload offsets `0x0E...0x0F`.
@@ -331,13 +335,18 @@ Lighting/profile candidates:
   effects `Static`, `SingleOn`, `SingleOff`, `Glittering`, `Falling`,
   `Colourful`, `Breath`, `Spectrum`, `Outward`, `Scrolling`, `Rolling`,
   `Rotating`, `Explode`, `Launch`, `Ripples`, `Flowing`, `Pulsating`, `Tilt`,
-  `Shuttle`, `LED Off`, `Inwards`, and `Floweriness`; `lighting-effect-*`
-  exports map those UI names to sequential selector-03 table byte values across
-  all known physical keys for controlled physical tests. These are still
-  candidate artifacts, not proof of the high-level firmware effect opcode.
-  `lighting-mode-apply`, `lighting-mode-preset-apply`, and
-  `lighting-effect-apply` validate or generate the sequence first and remain
-  guarded by `--unsafe-no-backup`.
+  `Shuttle`, `LED Off`, `Inwards`, and `Floweriness`. `lighting-effect-*` now
+  uses the native `04 13` mode+color path instead of this selector-03 table.
+  `lighting-mode-apply` and `lighting-mode-preset-apply` still validate or
+  generate selector-03 test patterns first and remain guarded by
+  `--unsafe-no-backup`.
+  A later comparison against the bundled GMK67 SQLite databases showed that
+  `t_light_data` only defines rows `mode=1...20`, with `mode=15` selected in the
+  ZUOYO DB and matching the Windows `Ripples` label. That makes the DB-backed
+  mode IDs one-based: `Static=1`, `Breath=7`, `Ripples=15`, `LED Off=20`.
+  `Inwards` and `Floweriness` appear in the shared language file but are not
+  backed by rows in the GMK67 `t_light_data` table. `rgb-dump` reads only the
+  custom per-key RGB table and does not report this built-in mode/color state.
 - An alternate full-table operation at VA `0x414BE0` sends `04 18`, then
   `04 27` with byte 8 set to `09`, writes a table through the same keymap-like
   record builder, then finishes with `04 02` and `04 F0`. The function declares

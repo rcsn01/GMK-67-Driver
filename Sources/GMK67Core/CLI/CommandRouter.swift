@@ -1286,28 +1286,51 @@ func run(_ args: [String]) throws {
         printLightingEffectList()
 
     case "lighting-effect-export":
-        guard args.count == 4 else {
+        guard args.count >= 4 else {
             printUsage()
             return
         }
         let path = args[2]
-        let effect = try lightingEffect(named: args[3])
-        let assignments = lightingEffectAssignments(effect)
-        let table = try lightingModeTable(assignments: assignments)
-        let sequence = lightingModeFeatureSequence(table: table)
+        let options = try parseLightingEffectApplyOptions(Array(args.dropFirst(3)))
+        let effect = try lightingEffect(named: options.name)
+        let sequence = try nativeLightingEffectFeatureSequence(
+            effect: effect,
+            color: options.color,
+            colorType: options.colorType,
+            byte5: options.byte5,
+            byte6: options.byte6,
+            byte7: options.byte7
+        )
         try writeFeatureSequenceFile(sequence, path: path)
-        print("Saved \(sequence.count) candidate lighting effect \(effect.name) to \(path). No HID device was opened.")
-        print(String(format: "%@ maps all %d known physical keys to selector-03 value 0x%02X.", effect.title, assignments.count, effect.value))
-        print("This is an offline artifact for the 04 23 selector-03 table path. Live apply is guarded by \(unsafeKeymapFlag).")
+        let payload = sequence[2]
+        print("Saved \(sequence.count) native lighting effect reports for \(effect.name) to \(path). No HID device was opened.")
+        print(String(format: "Payload: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
+                     payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
+        print("This models the Windows 04 18 / 04 13 mode+color path from the selected t_light_data row.")
 
     case "lighting-effect-apply":
-        let options = try parseUnsafeCandidateNameOptions(Array(args.dropFirst(2)), kind: "lighting effect")
+        let options = try parseLightingEffectApplyOptions(Array(args.dropFirst(2)))
         let effect = try lightingEffect(named: options.name)
-        let assignments = lightingEffectAssignments(effect)
-        let table = try lightingModeTable(assignments: assignments)
-        let sequence = lightingModeFeatureSequence(table: table)
-        print(String(format: "Applying candidate lighting effect %@: all %d known physical keys -> selector-03 value 0x%02X.", effect.name, assignments.count, effect.value))
-        try sendUnsafeCandidateFeatureSequence(sequence, writeIndex: options.writeIndex, kind: "lighting effect")
+        let sequence = try nativeLightingEffectFeatureSequence(
+            effect: effect,
+            color: options.color,
+            colorType: options.colorType,
+            byte5: options.byte5,
+            byte6: options.byte6,
+            byte7: options.byte7
+        )
+        let payload = sequence[2]
+        let driver = HIDDriver()
+        let devices = driver.devices()
+        guard devices.indices.contains(options.writeIndex) else {
+            throw DriverError.noDevice
+        }
+        let device = try driver.device(at: options.writeIndex, configurationOnly: false)
+        print(String(format: "Applying native lighting effect %@: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
+                     effect.name, payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
+        print("Write path: Windows-style 04 18 / 04 13 mode+color payload / 04 02 / 04 F0 using feature report 0x00 transport.")
+        try sendNativeLightingEffectFeatureSequence(driver: driver, device: device, payloads: sequence)
+        print("Native lighting effect sequence sent.")
 
     case "effect-list":
         guard args.count == 2 else {
@@ -1317,14 +1340,28 @@ func run(_ args: [String]) throws {
         printEffectPresetList()
 
     case "effect-apply":
-        guard args.count == 3 else {
-            printUsage()
-            return
-        }
-        let effect = try lightingEffect(named: args[2])
-        throw DriverError.invalidArgument(
-            "Animated effect apply is not proven yet for \(effect.name). The old one-click command only sent a candidate selector-03 table and may not change visible lighting. Use RGB presets for proven color changes, or use lighting-effect-export / lighting-effect-apply --unsafe-no-backup for controlled protocol tests."
+        let options = try parseLightingEffectApplyOptions(Array(args.dropFirst(2)))
+        let effect = try lightingEffect(named: options.name)
+        let sequence = try nativeLightingEffectFeatureSequence(
+            effect: effect,
+            color: options.color,
+            colorType: options.colorType,
+            byte5: options.byte5,
+            byte6: options.byte6,
+            byte7: options.byte7
         )
+        let payload = sequence[2]
+        let driver = HIDDriver()
+        let devices = driver.devices()
+        guard devices.indices.contains(options.writeIndex) else {
+            throw DriverError.noDevice
+        }
+        let device = try driver.device(at: options.writeIndex, configurationOnly: false)
+        print(String(format: "Applying native lighting effect %@: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
+                     effect.name, payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
+        print("Write path: Windows-style 04 18 / 04 13 mode+color payload / 04 02 / 04 F0 using feature report 0x00 transport.")
+        try sendNativeLightingEffectFeatureSequence(driver: driver, device: device, payloads: sequence)
+        print("Native lighting effect sequence sent.")
 
     case "lighting-mode-validate":
         let wantsJSON = args.contains("--json")
@@ -1508,6 +1545,33 @@ func run(_ args: [String]) throws {
         let driver = HIDDriver()
         try driver.setFeature(reportID: reportID, payload: payload)
         print("Wrote 64 bytes to feature report 0x\(String(format: "%02X", reportID)).")
+
+    case "feature-set-at", "output-set-at", "feature-set64-at", "output-set64-at":
+        guard
+            args.count == 5,
+            let index = Int(args[2]),
+            let reportID = Int(args[3], radix: 16)
+        else {
+            printUsage()
+            return
+        }
+        var payload = try parseHexBytes(args[4])
+        let padsTo64 = command == "feature-set64-at" || command == "output-set64-at"
+        if padsTo64 {
+            guard payload.count <= 64 else {
+                throw DriverError.invalidArgument("\(command) payload must be 64 bytes or fewer before padding.")
+            }
+            payload += [UInt8](repeating: 0, count: 64 - payload.count)
+        }
+        let driver = HIDDriver()
+        let device = try driver.device(at: index, configurationOnly: false)
+        if command == "feature-set-at" || command == "feature-set64-at" {
+            try driver.setFeature(device: device, reportID: reportID, payload: payload)
+            print(String(format: "Wrote %d bytes to feature report 0x%02X on scanned interface %d.", payload.count, reportID, index))
+        } else {
+            try driver.setOutput(device: device, reportID: reportID, payload: payload)
+            print(String(format: "Wrote %d bytes to output report 0x%02X on scanned interface %d.", payload.count, reportID, index))
+        }
 
     case "rgb-read-probe":
         let writeIndex = args.count > 2 ? Int(args[2]) : 0
@@ -1711,6 +1775,12 @@ func run(_ args: [String]) throws {
         print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the bytes sent.")
         print("Non-zero RGB records:")
         printRGBRecords(verifyFrames, keyByLightIndex: keyMap)
+        if let failure = rgbVerificationFailureMessage(
+            assignments: [RGBAssignment(lightIndex: lightIndex, label: keyLabel, color: colorBytes)],
+            records: records
+        ) {
+            throw DriverError.invalidArgument(failure)
+        }
 
     case "rgb-map":
         guard args.count >= 3 else {
@@ -1749,9 +1819,13 @@ func run(_ args: [String]) throws {
         print("Write sequence sent. Reading rendered table back...")
 
         let verifyFrames = try readRGBFrames(driver: driver, writeDevice: writeDevice, readDevice: readDevice)
+        let records = rgbFramesToRecords(verifyFrames)
         print("Note: rendered readback may be scaled or mode-composited and may not exactly echo the bytes sent.")
         print("Non-zero RGB records:")
         printRGBRecords(verifyFrames, keyByLightIndex: keyMap)
+        if let failure = rgbVerificationFailureMessage(assignments: assignments, records: records) {
+            throw DriverError.invalidArgument(failure)
+        }
 
     case "rgb-file-map":
         guard args.count >= 5 else {

@@ -134,6 +134,63 @@ func rgbFramesToRecords(_ frames: [[UInt8]]) -> [Int: (red: UInt8, green: UInt8,
     return records
 }
 
+func rgbReadbackMatchesRequestedColor(
+    requested: [UInt8],
+    readback: (red: UInt8, green: UInt8, blue: UInt8)?
+) -> Bool {
+    guard requested.count == 3 else { return false }
+    let requestedTotal = Int(requested[0]) + Int(requested[1]) + Int(requested[2])
+    guard requestedTotal > 0 else {
+        guard let readback else { return true }
+        return readback.red == 0 && readback.green == 0 && readback.blue == 0
+    }
+    guard let readback else { return false }
+    let actual = [readback.red, readback.green, readback.blue]
+    guard actual.contains(where: { $0 > 0 }) else { return false }
+
+    let requestedMax = requested.max() ?? 0
+    let dominantChannels = requested.enumerated().compactMap { index, value in
+        value == requestedMax ? index : nil
+    }
+    let actualMax = actual.max() ?? 0
+    return dominantChannels.contains { actual[$0] == actualMax && actual[$0] > 0 }
+}
+
+func rgbVerificationFailureMessage(
+    assignments: [RGBAssignment],
+    records: [Int: (red: UInt8, green: UInt8, blue: UInt8)]
+) -> String? {
+    var failures: [String] = []
+    for assignment in assignments {
+        let record = records[assignment.lightIndex]
+        guard !rgbReadbackMatchesRequestedColor(requested: assignment.color, readback: record) else {
+            continue
+        }
+        if let record {
+            failures.append(String(
+                format: "%@ expected %02X %02X %02X, read back %02X %02X %02X",
+                assignment.label,
+                assignment.color[0],
+                assignment.color[1],
+                assignment.color[2],
+                record.red,
+                record.green,
+                record.blue
+            ))
+        } else {
+            failures.append(String(
+                format: "%@ expected %02X %02X %02X, read back off/missing",
+                assignment.label,
+                assignment.color[0],
+                assignment.color[1],
+                assignment.color[2]
+            ))
+        }
+    }
+    guard !failures.isEmpty else { return nil }
+    return "RGB verification failed: " + failures.joined(separator: "; ")
+}
+
 func rgbLightReadbackRecords(_ chunks: [[UInt8]], keyByLightIndex: [Int: KeyItem] = [:], recordByteLimit: Int? = nil) -> [RGBLightReadback] {
     var records: [RGBLightReadback] = []
     for (chunkIndex, bytes) in chunks.enumerated() {
@@ -207,7 +264,7 @@ enum RGBWriteMode {
     var description: String {
         switch self {
         case .persistentCustomLighting:
-            return "native custom-lighting RGB path (04 23 selector 09, then 04 13 static-80 activation)"
+            return "proven custom-lighting RGB table upload (04 23 selector 09 as feature report 0x00)"
         case .legacyTable:
             return "legacy static RGB table path (04 20 / table chunks / 04 02)"
         }
@@ -257,7 +314,11 @@ func readRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, readDevice: IOHI
     try driver.setVendorFeature64(device: writeDevice, payload: readRequest)
 
     var frames: [[UInt8]] = []
-    for _ in 0..<chunks {
+    usleep(50_000)
+    let first = try driver.getInput(device: readDevice, reportID: 0, length: 64)
+    frames.append(first)
+    let remaining = isRGBReadbackEchoFrame(first) ? chunks : max(0, chunks - 1)
+    for _ in 0..<remaining {
         usleep(50_000)
         frames.append(try driver.getInput(device: readDevice, reportID: 0, length: 64))
     }
@@ -313,7 +374,24 @@ func writeRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8
 private func writePersistentRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {
     let assignments = try rgbFrameAssignments(from: normalizedRGBTableFrames(frames))
     let table = try customLightingRGBTable(assignments: assignments)
-    try sendFeatureSequence(driver: driver, device: writeDevice, payloads: try nativePersistentRGBFeatureSequence(table: table))
+    try sendPersistentRGBFeatureSequence(driver: driver, device: writeDevice, payloads: try nativePersistentRGBFeatureSequence(table: table))
+}
+
+private func writeLiveCustomModeRGBTable(driver: HIDDriver, writeDevice: IOHIDDevice, assignments: [RGBAssignment]) throws {
+    let table = try liveCustomModeRGBTable(assignments: assignments)
+    let sequence = liveCustomModeRGBFeatureSequence(table: table)
+    let delay = featureReportDelayMicroseconds()
+    guard let select = sequence.first, let commit = sequence.last else {
+        throw DriverError.invalidArgument("Live custom-mode RGB sequence is empty.")
+    }
+    try driver.sendFeature64(device: writeDevice, bytes: select)
+    usleep(delay)
+    for chunk in sequence.dropFirst().dropLast() {
+        try driver.sendTableChunk64(device: writeDevice, payload: chunk)
+        usleep(delay)
+    }
+    try driver.sendFeature64(device: writeDevice, bytes: commit)
+    usleep(delay)
 }
 
 private func writeLegacyRGBFrames(driver: HIDDriver, writeDevice: IOHIDDevice, frames: [[UInt8]]) throws {

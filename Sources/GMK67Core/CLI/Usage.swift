@@ -195,6 +195,18 @@ func printUsage() {
       feature-set64 <report-id-hex> <payload-hex>
           Write a feature report payload padded with zeros to exactly 64 bytes.
 
+      feature-set-at <index> <report-id-hex> <payload-hex>
+          Write a raw feature report payload to any VID/PID interface shown by scan.
+
+      feature-set64-at <index> <report-id-hex> <payload-hex>
+          Write a raw feature report padded with zeros to exactly 64 bytes to any interface.
+
+      output-set-at <index> <report-id-hex> <payload-hex>
+          Write a raw output report payload to any VID/PID interface shown by scan.
+
+      output-set64-at <index> <report-id-hex> <payload-hex>
+          Write a raw output report padded with zeros to exactly 64 bytes to any interface.
+
       rgb-read-probe [write-index] [listen-index] [chunks] [seconds]
           Send the vendor RGB readback request and print returned input reports.
 
@@ -244,10 +256,10 @@ func printUsage() {
           Save a backup, apply a built-in RGB preset, then read back rendered RGB.
 
       effect-list
-          List experimental animated lighting effect names with friendly aliases.
+          List built-in animated lighting effect names with friendly aliases.
 
-      effect-apply <effect-name>
-          Refuse live apply and explain that animated effect selection is not proven yet.
+      effect-apply <effect-name> [rrggbb] [--write-index=N] [--colortype=N] [--byte5=N] [--byte6=N] [--byte7=N]
+          Alias for lighting-effect-apply.
 
       rgb-file-dump <path> [--json]
           Parse a saved RGB table file and print non-zero records without opening HID.
@@ -274,7 +286,7 @@ func printUsage() {
           Restore the newest valid automatic RGB backup file and read back the result.
 
       \(legacyRGBTableFlag)
-          Use only the older 04 20 static RGB table writer instead of the default selector-09 write plus 04 13 activation.
+          Use only the older 04 20 static RGB table writer instead of the default selector-09 feature-report write.
 
       keymap-dry-run <source-key> <target-key-or-hid-hex> [modifier-key-or-hid-hex]
           Build and print the candidate simple-remap feature sequence without sending it.
@@ -407,13 +419,13 @@ func printUsage() {
           UNSAFE: write a built-in candidate lighting-mode preset sequence.
 
       lighting-effect-list
-          List Windows-named candidate lighting effects mapped to selector-03 values.
+          List GMK67 built-in lighting effects from the Windows t_light_data mode rows.
 
-      lighting-effect-export <path> <effect-name>
-          Write a Windows-named candidate lighting effect table without HID.
+      lighting-effect-export <path> <effect-name> [rrggbb] [--colortype=N] [--byte5=N] [--byte6=N] [--byte7=N]
+          Write the native 04 13 built-in lighting effect mode+color sequence without HID.
 
-      lighting-effect-apply <effect-name> \(unsafeKeymapFlag) [--write-index=N]
-          UNSAFE: write a Windows-named candidate lighting effect sequence.
+      lighting-effect-apply <effect-name> [rrggbb] [--write-index=N] [--colortype=N] [--byte5=N] [--byte6=N] [--byte7=N]
+          Apply the confirmed native 04 13 built-in lighting effect mode+color payload.
 
       lighting-mode-validate <path> [--json]
           Validate an exported candidate lighting-mode table sequence without HID.

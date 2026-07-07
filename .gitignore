@@ -1,5 +1,6 @@
 .build/
 dist/
 extracted/
+.tmp/
 .DS_Store
 *.hex

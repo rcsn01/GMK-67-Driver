@@ -420,28 +420,29 @@ let lightingModePresetDefinitions: [LightingModePresetDefinition] = [
 ]
 
 let lightingEffectDefinitions: [LightingEffectDefinition] = [
-    LightingEffectDefinition(name: "static", title: "Static", value: 0x00, aliases: ["solid", "steady"], summary: "Steady lighting without animation."),
-    LightingEffectDefinition(name: "single-on", title: "SingleOn", value: 0x01, aliases: ["lit-up", "reactive-on", "key-up"], summary: "Pressed keys light up, then fade."),
-    LightingEffectDefinition(name: "single-off", title: "SingleOff", value: 0x02, aliases: ["lit-down", "reactive-off", "key-off"], summary: "Board stays lit; pressed keys go dark, then recover."),
-    LightingEffectDefinition(name: "glittering", title: "Glittering", value: 0x03, aliases: ["glitter", "sparkle", "starlight", "twinkle"], summary: "Random keys twinkle like starlight."),
-    LightingEffectDefinition(name: "falling", title: "Falling", value: 0x04, aliases: ["rain", "raindrop", "matrix-rain"], summary: "Lights fall down the board like rain."),
-    LightingEffectDefinition(name: "colourful", title: "Colourful", value: 0x05, aliases: ["colorful", "rainbow", "multicolor"], summary: "Whole board cycles through many colors."),
-    LightingEffectDefinition(name: "breath", title: "Breath", value: 0x06, aliases: ["breathing", "pulse-fade", "fade"], summary: "Whole board fades in and out slowly."),
-    LightingEffectDefinition(name: "spectrum", title: "Spectrum", value: 0x07, aliases: ["spectrum-cycle", "color-cycle", "hue-cycle"], summary: "Whole board steps through the color spectrum."),
-    LightingEffectDefinition(name: "outward", title: "Outward", value: 0x08, aliases: ["radiate", "outwards"], summary: "Light radiates outward from the center."),
-    LightingEffectDefinition(name: "scrolling", title: "Scrolling", value: 0x09, aliases: ["wave", "wave-right", "flow-wave"], summary: "A wave of color scrolls across the board."),
-    LightingEffectDefinition(name: "rolling", title: "Rolling", value: 0x0A, aliases: ["roll", "wave-down"], summary: "Bands of light roll across the rows."),
-    LightingEffectDefinition(name: "rotating", title: "Rotating", value: 0x0B, aliases: ["rotate", "spiral", "windmill"], summary: "Light rotates around the board."),
-    LightingEffectDefinition(name: "explode", title: "Explode", value: 0x0C, aliases: ["explosion", "burst"], summary: "Keypresses burst light outward."),
-    LightingEffectDefinition(name: "launch", title: "Launch", value: 0x0D, aliases: ["laser", "shoot"], summary: "Keypresses launch a beam across the row."),
-    LightingEffectDefinition(name: "ripples", title: "Ripples", value: 0x0E, aliases: ["ripple", "water", "rings"], summary: "Keypresses ripple outward in rings."),
-    LightingEffectDefinition(name: "flowing", title: "Flowing", value: 0x0F, aliases: ["flow", "stream", "aurora"], summary: "Colors flow smoothly across the board."),
-    LightingEffectDefinition(name: "pulsating", title: "Pulsating", value: 0x10, aliases: ["pulse", "heartbeat"], summary: "Board pulses rhythmically."),
-    LightingEffectDefinition(name: "tilt", title: "Tilt", value: 0x11, aliases: ["slant", "diagonal"], summary: "Diagonal bands sweep the board."),
-    LightingEffectDefinition(name: "shuttle", title: "Shuttle", value: 0x12, aliases: ["bounce", "ping-pong"], summary: "Light shuttles back and forth."),
-    LightingEffectDefinition(name: "led-off", title: "LED Off", value: 0x13, aliases: ["off", "lights-off", "dark"], summary: "Turn all lighting off."),
-    LightingEffectDefinition(name: "inwards", title: "Inwards", value: 0x14, aliases: ["converge", "inward"], summary: "Light converges toward the center."),
-    LightingEffectDefinition(name: "floweriness", title: "Floweriness", value: 0x15, aliases: ["flower", "bloom"], summary: "Blooming flower-like color pattern.")
+    // The GMK67 SQLite profile stores these as t_light_data.mode rows 1...20.
+    // The English language file also contains Inwards/Floweriness labels, but
+    // this board's bundled DB has no backing t_light_data rows for modes 21/22.
+    LightingEffectDefinition(name: "static", title: "Static", value: 0x01, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["solid", "steady"], summary: "Steady lighting without animation."),
+    LightingEffectDefinition(name: "single-on", title: "SingleOn", value: 0x02, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 5, byte7: 9, aliases: ["lit-up", "reactive-on", "key-up"], summary: "Pressed keys light up, then fade."),
+    LightingEffectDefinition(name: "single-off", title: "SingleOff", value: 0x03, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["lit-down", "reactive-off", "key-off"], summary: "Board stays lit; pressed keys go dark, then recover."),
+    LightingEffectDefinition(name: "glittering", title: "Glittering", value: 0x04, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 12, byte7: 5, aliases: ["glitter", "sparkle", "starlight", "twinkle"], summary: "Random keys twinkle like starlight."),
+    LightingEffectDefinition(name: "falling", title: "Falling", value: 0x05, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 10, byte7: 6, aliases: ["rain", "raindrop", "matrix-rain"], summary: "Lights fall down the board like rain."),
+    LightingEffectDefinition(name: "colourful", title: "Colourful", value: 0x06, colorType: 1, red: 255, green: 0, blue: 0, byte5: 0, byte6: 15, byte7: 10, aliases: ["colorful", "rainbow", "multicolor"], summary: "Whole board cycles through many colors."),
+    LightingEffectDefinition(name: "breath", title: "Breath", value: 0x07, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 6, aliases: ["breathing", "pulse-fade", "fade"], summary: "Whole board fades in and out slowly."),
+    LightingEffectDefinition(name: "spectrum", title: "Spectrum", value: 0x08, colorType: 1, red: 255, green: 0, blue: 0, byte5: 0, byte6: 15, byte7: 10, aliases: ["spectrum-cycle", "color-cycle", "hue-cycle"], summary: "Whole board steps through the color spectrum."),
+    LightingEffectDefinition(name: "outward", title: "Outward", value: 0x09, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 8, aliases: ["radiate", "outwards"], summary: "Light radiates outward from the center."),
+    LightingEffectDefinition(name: "scrolling", title: "Scrolling", value: 0x0A, colorType: 0, red: 255, green: 255, blue: 255, byte5: 2, byte6: 15, byte7: 10, aliases: ["wave", "wave-right", "flow-wave"], summary: "A wave of color scrolls across the board."),
+    LightingEffectDefinition(name: "rolling", title: "Rolling", value: 0x0B, colorType: 0, red: 255, green: 255, blue: 255, byte5: 1, byte6: 15, byte7: 10, aliases: ["roll", "wave-down"], summary: "Bands of light roll across the rows."),
+    LightingEffectDefinition(name: "rotating", title: "Rotating", value: 0x0C, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["rotate", "spiral", "windmill"], summary: "Light rotates around the board."),
+    LightingEffectDefinition(name: "explode", title: "Explode", value: 0x0D, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["explosion", "burst"], summary: "Keypresses burst light outward."),
+    LightingEffectDefinition(name: "launch", title: "Launch", value: 0x0E, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 5, aliases: ["laser", "shoot"], summary: "Keypresses launch a beam across the row."),
+    LightingEffectDefinition(name: "ripples", title: "Ripples", value: 0x0F, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 7, aliases: ["ripple", "water", "rings"], summary: "Keypresses ripple outward in rings."),
+    LightingEffectDefinition(name: "flowing", title: "Flowing", value: 0x10, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["flow", "stream", "aurora"], summary: "Colors flow smoothly across the board."),
+    LightingEffectDefinition(name: "pulsating", title: "Pulsating", value: 0x11, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 15, aliases: ["pulse", "heartbeat"], summary: "Board pulses rhythmically."),
+    LightingEffectDefinition(name: "tilt", title: "Tilt", value: 0x12, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["slant", "diagonal"], summary: "Diagonal bands sweep the board."),
+    LightingEffectDefinition(name: "shuttle", title: "Shuttle", value: 0x13, colorType: 0, red: 255, green: 255, blue: 255, byte5: 0, byte6: 15, byte7: 10, aliases: ["bounce", "ping-pong"], summary: "Light shuttles back and forth."),
+    LightingEffectDefinition(name: "led-off", title: "LED Off", value: 0x14, colorType: 1, red: 255, green: 0, blue: 0, byte5: 0, byte6: 15, byte7: 10, aliases: ["off", "lights-off", "dark"], summary: "Turn all lighting off.")
 ]
 
 let combinedProfilePresetDefinitions: [CombinedProfilePresetDefinition] = [
@@ -804,23 +805,36 @@ func printLightingModePresetList() {
 }
 
 func printLightingEffectList() {
-    print("Candidate lighting effects from the Windows UI:")
+    print("GMK67 lighting effects from t_light_data mode rows:")
     for effect in lightingEffectDefinitions {
-        print(String(format: "  %@ - %@: selector-03 value 0x%02X", effect.name, effect.title, effect.value))
+        print(String(
+            format: "  %@ - %@: mode 0x%02X rgb=%02X%02X%02X colortype=%d byte5=%d byte6=%d byte7=%d",
+            effect.name,
+            effect.title,
+            effect.value,
+            effect.red,
+            effect.green,
+            effect.blue,
+            effect.colorType,
+            effect.byte5,
+            effect.byte6,
+            effect.byte7
+        ))
     }
-    print("These are mapped into the modeled 04 23 selector-03 table for controlled testing; live apply remains guarded.")
+    print("These names come from the Windows language resource; the 20 mode IDs are confirmed by the GMK67 SQLite t_light_data rows.")
+    print("Live animated apply uses the native 04 13 mode+color payload shape reverse-engineered from DeviceDriver.exe.")
 }
 
 func printEffectPresetList() {
-    print("Experimental lighting effect names:")
+    print("Built-in lighting effect names:")
     for effect in lightingEffectDefinitions {
         print("  \(effect.name) - \(effect.title): \(effect.summary)")
         if !effect.aliases.isEmpty {
             print("    aliases: \(effect.aliases.joined(separator: ", "))")
         }
     }
-    print("Live animated effect selection is not proven yet.")
-    print("For controlled protocol testing, export with lighting-effect-export or apply from the guarded Lighting panel.")
+    print("Live animated effect selection uses the confirmed native 04 13 mode+color payload.")
+    print("Use lighting-effect-apply to send a mode, optional color, and DB-backed option bytes.")
 }
 
 func printCombinedProfilePresetList() {

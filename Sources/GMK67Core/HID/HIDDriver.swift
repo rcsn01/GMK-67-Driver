@@ -149,6 +149,13 @@ final class HIDDriver {
         }
     }
 
+    func setFeature64UsingFirstByteAsReportID(device: IOHIDDevice, payload: [UInt8]) throws {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Vendor feature payloads must be exactly 64 bytes.")
+        }
+        try setFeature(device: device, reportID: Int(payload[0]), payload: Array(payload.dropFirst()))
+    }
+
     func setFeatureWindowsFramed(device: IOHIDDevice, payload: [UInt8]) throws {
         var buffer = [UInt8(0)] + payload
         let result = IOHIDDeviceSetReport(

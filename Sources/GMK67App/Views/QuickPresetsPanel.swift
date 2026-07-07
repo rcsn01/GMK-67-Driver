@@ -16,6 +16,12 @@ private struct QuickRGBTheme: Identifiable {
 struct QuickPresetsPanel: View {
     @ObservedObject var model: DriverModel
 
+    private let builtInEffects = [
+        "static", "single-on", "single-off", "glittering", "falling", "colourful",
+        "breath", "spectrum", "outward", "scrolling", "rolling", "rotating",
+        "explode", "launch", "ripples", "flowing", "pulsating", "tilt", "shuttle", "led-off"
+    ]
+
     private let layouts: [QuickRGBLayout] = [
         QuickRGBLayout(name: "all", label: "All Keys"),
         QuickRGBLayout(name: "wasd", label: "WASD"),
@@ -52,10 +58,37 @@ struct QuickPresetsPanel: View {
     private let columns = [GridItem(.adaptive(minimum: 118), spacing: 8)]
 
     var body: some View {
-        Panel("RGB Preset") {
+        Panel("Lighting") {
             VStack(alignment: .leading, spacing: 12) {
                 ControlGrid {
-                    Text("Preset")
+                    Text("Built-in Effect")
+                    Picker("", selection: $model.lightingEffectName) {
+                        ForEach(builtInEffects, id: \.self) { effect in
+                            Text(effect).tag(effect)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 170)
+                    Text("Color")
+                    ColorPicker("", selection: Binding(
+                        get: { model.lightingEffectColor },
+                        set: {
+                            model.lightingEffectColor = $0
+                            model.lightingEffectColorHex = rgbHex($0)
+                        }
+                    ), supportsOpacity: false)
+                    .labelsHidden()
+                    .frame(width: 44)
+                    TextField("FFFFFF", text: $model.lightingEffectColorHex)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                    CommandButton("Apply Effect", systemImage: "sparkles") {
+                        model.applyLightingEffect()
+                    }
+                }
+
+                ControlGrid {
+                    Text("Static Layout")
                     Picker("", selection: $model.rgbPresetName) {
                         ForEach(layouts) { layout in
                             Text(layout.label).tag(layout.name)
@@ -105,7 +138,7 @@ struct QuickPresetsPanel: View {
                     CommandButton("Undo (Restore Backup)", systemImage: "arrow.uturn.backward") {
                         model.restoreLatestRGBBackup()
                     }
-                    Text("Apply uses the selected preset layout with the selected color theme.")
+                    Text("Built-in effects are firmware modes. Static layouts write a custom per-key RGB table.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

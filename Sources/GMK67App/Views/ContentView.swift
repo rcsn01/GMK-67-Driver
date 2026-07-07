@@ -74,11 +74,7 @@ struct ContentView: View {
     private func pageSettings(for page: AppPage) -> some View {
         switch page {
         case .rgb:
-            VStack(alignment: .leading, spacing: 18) {
-                QuickPresetsPanel(model: model)
-                SelectedKeyColorControls(model: model)
-                RGBPanel(model: model)
-            }
+            RGBPanel(model: model)
         case .profiles:
             ProfilePanel(model: model)
         case .keymap:

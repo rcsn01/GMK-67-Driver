@@ -311,6 +311,52 @@ func parseRGBRestoreLatestOptions(_ args: [String]) throws -> (directory: String
     return (directory, writeIndex, readIndex, writeMode)
 }
 
+func parseLightingEffectApplyOptions(_ args: [String]) throws -> (name: String, color: [UInt8]?, colorType: UInt8?, byte5: UInt8?, byte6: UInt8?, byte7: UInt8?, hasUnsafeFlag: Bool, writeIndex: Int) {
+    guard let name = args.first else {
+        throw DriverError.invalidArgument("lighting-effect-apply requires an effect name.")
+    }
+
+    var color: [UInt8]?
+    var colorType: UInt8?
+    var byte5: UInt8?
+    var byte6: UInt8?
+    var byte7: UInt8?
+    var hasUnsafeFlag = false
+    var writeIndex = 0
+
+    for argument in args.dropFirst() {
+        if argument == unsafeKeymapFlag {
+            hasUnsafeFlag = true
+        } else if argument.hasPrefix("--write-index=") {
+            let value = String(argument.dropFirst("--write-index=".count))
+            guard let parsed = Int(value), parsed >= 0 else {
+                throw DriverError.invalidArgument("Invalid --write-index value: \(value)")
+            }
+            writeIndex = parsed
+        } else if argument.hasPrefix("--colortype=") {
+            colorType = try parseOneByteLiteral(String(argument.dropFirst("--colortype=".count)), field: "lighting effect colortype")
+        } else if argument.hasPrefix("--byte5=") {
+            byte5 = try parseOneByteLiteral(String(argument.dropFirst("--byte5=".count)), field: "lighting effect byte5")
+        } else if argument.hasPrefix("--byte6=") {
+            byte6 = try parseOneByteLiteral(String(argument.dropFirst("--byte6=".count)), field: "lighting effect byte6")
+        } else if argument.hasPrefix("--byte7=") {
+            byte7 = try parseOneByteLiteral(String(argument.dropFirst("--byte7=".count)), field: "lighting effect byte7")
+        } else if argument.hasPrefix("--") {
+            throw DriverError.invalidArgument("Unknown lighting-effect-apply option: \(argument)")
+        } else if color == nil {
+            let parsedColor = try parseHexBytes(argument)
+            guard parsedColor.count == 3 else {
+                throw DriverError.invalidArgument("Lighting effect color must be exactly three bytes, for example FF0000 or FF 00 00.")
+            }
+            color = parsedColor
+        } else {
+            throw DriverError.invalidArgument("Unexpected lighting-effect-apply argument: \(argument)")
+        }
+    }
+
+    return (name, color, colorType, byte5, byte6, byte7, hasUnsafeFlag, writeIndex)
+}
+
 func parseByteNumber(_ argument: String, label: String) throws -> Int {
     let lower = argument.lowercased()
     let normalized = lower.replacingOccurrences(of: "0x", with: "")
@@ -742,6 +788,13 @@ func customLightingRGBTable(assignments: [RGBAssignment], brightnessScale: Int =
     // Its table builder applies brightness before HID as (channel * scale) >> 8.
     var table = [UInt8](repeating: 0, count: 0x280)
     let keyMap = keyMapByLightIndex()
+    if ProcessInfo.processInfo.environment["GMK67_FULL_KEY_RGB_TABLE"] != "0" {
+        for lightIndex in keyMap.keys {
+            let offset = lightIndex * 4
+            guard offset + 3 < 0x23E else { continue }
+            table[offset] = UInt8(lightIndex)
+        }
+    }
     for assignment in assignments {
         let key = keyMap[assignment.lightIndex]
         let tableIndex: Int
@@ -776,17 +829,66 @@ func customLightingRGBFeatureSequence(table: [UInt8]) -> [[UInt8]] {
     let begin = [0x04, 0x18] + [UInt8](repeating: 0, count: 62)
     var select = [UInt8](repeating: 0, count: 64)
     select[0] = 0x04
-    select[1] = 0x23
+    if ProcessInfo.processInfo.environment["GMK67_CUSTOM_RGB_SELECTOR"] == "27" {
+        select[1] = 0x27
+    } else {
+        select[1] = 0x23
+    }
     select[8] = 0x09
     let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
     let finish = [0x04, 0xF0] + [UInt8](repeating: 0, count: 62)
     return [begin, select] + windowsChunkedFeaturePayloads(table, declaredLength: table.count) + [commit, finish]
 }
 
+func liveCustomModeRGBTable(assignments: [RGBAssignment], brightnessScale: Int = 0x100) throws -> [UInt8] {
+    guard brightnessScale >= 0, brightnessScale <= 0x100 else {
+        throw DriverError.invalidArgument("Brightness scale must be 0...256.")
+    }
+    // DeviceDriver.exe 0x425E13 uses the live 04 20/selector-08 table while
+    // editing custom lighting. It declares 0x244 bytes, which the Windows
+    // chunk helper sends as eight 64-byte output reports.
+    var table = [UInt8](repeating: 0, count: 0x244)
+    let keyMap = keyMapByLightIndex()
+    if ProcessInfo.processInfo.environment["GMK67_FULL_KEY_RGB_TABLE"] != "0" {
+        for lightIndex in keyMap.keys {
+            let offset = lightIndex * 4
+            guard offset + 3 < table.count else { continue }
+            table[offset] = UInt8(lightIndex)
+        }
+    }
+    for assignment in assignments {
+        let offset = assignment.lightIndex * 4
+        guard offset + 3 < table.count else {
+            throw DriverError.invalidArgument("Light index 0x\(String(format: "%02X", assignment.lightIndex)) is outside the live custom-mode RGB table range.")
+        }
+        let color = assignment.color.map { windowsBrightnessScaledChannel($0, brightnessScale: brightnessScale) }
+        table[offset] = UInt8(assignment.lightIndex)
+        table[offset + 1] = color[0]
+        table[offset + 2] = color[1]
+        table[offset + 3] = color[2]
+    }
+    return table
+}
+
+func liveCustomModeRGBFeatureSequence(table: [UInt8]) -> [[UInt8]] {
+    var select = [UInt8](repeating: 0, count: 64)
+    select[0] = 0x04
+    select[1] = 0x20
+    select[8] = 0x08
+    let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
+    return [select] + windowsChunkedFeaturePayloads(table, declaredLength: 0x244) + [commit]
+}
+
 func nativePersistentRGBFeatureSequence(table: [UInt8]) throws -> [[UInt8]] {
-    // DeviceDriver.exe 0x41DCD0 writes the selector-09 table, then immediately
-    // calls the 0x41E050 short 04 13 activation path before returning.
-    try customLightingRGBFeatureSequence(table: table) + shortOperationTemplateFeatureSequence(variant: "static-80")
+    // The board accepts this table when it is replayed as raw feature report
+    // ID 0x00 frames. The later 04 13 activation call observed in the Windows
+    // binary can clear or hide the table on this macOS path, so keep normal RGB
+    // writes to the proven selector-09 table upload.
+    var sequence = customLightingRGBFeatureSequence(table: table)
+    if ProcessInfo.processInfo.environment["GMK67_RGB_SEND_ACTIVATION"] == "1" {
+        sequence += try shortOperationTemplateFeatureSequence(variant: "static-80")
+    }
+    return sequence
 }
 
 func lightingModeTable(assignments: [ByteAssignment]) throws -> [UInt8] {
@@ -846,7 +948,11 @@ func shortOperationTemplatePayload(variant: String) throws -> [UInt8] {
     case "empty":
         break
     case "static-80":
+        // Default RKGK890_data.db mode 0x14 row:
+        // colortype=1, byte2=255, byte3=0, byte4=0, byte5=0.
         payload[0] = 0x80
+        payload[1] = 0xFF
+        payload[8] = 0x01
         payload[9] = 0x0F
         payload[10] = 0x0F
     default:
@@ -885,6 +991,59 @@ func shortOperationTemplateFeatureSequence(variant: String = "empty") throws -> 
     let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
     let finish = [0x04, 0xF0] + [UInt8](repeating: 0, count: 62)
     return [begin, select, try shortOperationTemplatePayload(variant: variant), commit, finish]
+}
+
+func nativeLightingEffectPayload(
+    effect: LightingEffectDefinition,
+    color: [UInt8]? = nil,
+    colorType: UInt8? = nil,
+    byte5: UInt8? = nil,
+    byte6: UInt8? = nil,
+    byte7: UInt8? = nil
+) throws -> [UInt8] {
+    if let color, color.count != 3 {
+        throw DriverError.invalidArgument("Lighting effect color must contain exactly three bytes.")
+    }
+
+    let rgb = color ?? [effect.red, effect.green, effect.blue]
+    var payload = [UInt8](repeating: 0, count: 64)
+    payload[0] = effect.value
+    payload[1] = rgb[0]
+    payload[2] = rgb[1]
+    payload[3] = rgb[2]
+    payload[8] = colorType ?? (color == nil ? effect.colorType : 0)
+    payload[9] = (byte6 ?? effect.byte6) &+ 1
+    payload[10] = (byte7 ?? effect.byte7) &+ 1
+    payload[11] = byte5 ?? effect.byte5
+    payload[14] = 0xAA
+    payload[15] = 0x55
+    return payload
+}
+
+func nativeLightingEffectFeatureSequence(
+    effect: LightingEffectDefinition,
+    color: [UInt8]? = nil,
+    colorType: UInt8? = nil,
+    byte5: UInt8? = nil,
+    byte6: UInt8? = nil,
+    byte7: UInt8? = nil
+) throws -> [[UInt8]] {
+    let begin = [0x04, 0x18] + [UInt8](repeating: 0, count: 62)
+    var select = [UInt8](repeating: 0, count: 64)
+    select[0] = 0x04
+    select[1] = 0x13
+    select[8] = 0x01
+    let commit = [0x04, 0x02] + [UInt8](repeating: 0, count: 62)
+    let finish = [0x04, 0xF0] + [UInt8](repeating: 0, count: 62)
+    let payload = try nativeLightingEffectPayload(
+        effect: effect,
+        color: color,
+        colorType: colorType,
+        byte5: byte5,
+        byte6: byte6,
+        byte7: byte7
+    )
+    return [begin, select, payload, commit, finish]
 }
 
 func keyboardSettingsPayload(assignments: [ByteAssignment]) throws -> [UInt8] {
@@ -1290,6 +1449,82 @@ func sendFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UIn
         }
         usleep(30_000)
     }
+}
+
+enum FeatureSequenceTransport: String {
+    case defaultMixed = "mixed"
+    case feature64 = "feature64"
+    case reportIDFirstByte = "report-id-first-byte"
+    case windowsFramed = "windows-framed"
+}
+
+func featureReportDelayMicroseconds() -> useconds_t {
+    guard
+        let rawValue = ProcessInfo.processInfo.environment["GMK67_REPORT_DELAY_US"],
+        let value = useconds_t(rawValue),
+        value >= 0
+    else {
+        return 30_000
+    }
+    return value
+}
+
+func persistentRGBFeatureSequenceTransport() throws -> FeatureSequenceTransport {
+    let rawValue = ProcessInfo.processInfo.environment["GMK67_PERSISTENT_TRANSPORT"] ?? FeatureSequenceTransport.feature64.rawValue
+    guard let transport = FeatureSequenceTransport(rawValue: rawValue) else {
+        throw DriverError.invalidArgument("Unknown GMK67_PERSISTENT_TRANSPORT: \(rawValue). Use mixed, feature64, report-id-first-byte, or windows-framed.")
+    }
+    return transport
+}
+
+func sendFeature64Sequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    let delay = featureReportDelayMicroseconds()
+    for payload in payloads {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Feature sequence payloads must be exactly 64 bytes.")
+        }
+        try driver.setVendorFeature64(device: device, payload: payload)
+        usleep(delay)
+    }
+}
+
+func sendReportIDFirstByteFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    let delay = featureReportDelayMicroseconds()
+    for payload in payloads {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Feature sequence payloads must be exactly 64 bytes.")
+        }
+        try driver.setFeature64UsingFirstByteAsReportID(device: device, payload: payload)
+        usleep(delay)
+    }
+}
+
+func sendWindowsFramedFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    let delay = featureReportDelayMicroseconds()
+    for payload in payloads {
+        guard payload.count == 64 else {
+            throw DriverError.invalidArgument("Feature sequence payloads must be exactly 64 bytes.")
+        }
+        try driver.sendFeature64WindowsFramed(device: device, bytes: payload)
+        usleep(delay)
+    }
+}
+
+func sendPersistentRGBFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    switch try persistentRGBFeatureSequenceTransport() {
+    case .defaultMixed:
+        try sendFeatureSequence(driver: driver, device: device, payloads: payloads)
+    case .feature64:
+        try sendFeature64Sequence(driver: driver, device: device, payloads: payloads)
+    case .reportIDFirstByte:
+        try sendReportIDFirstByteFeatureSequence(driver: driver, device: device, payloads: payloads)
+    case .windowsFramed:
+        try sendWindowsFramedFeatureSequence(driver: driver, device: device, payloads: payloads)
+    }
+}
+
+func sendNativeLightingEffectFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    try sendPersistentRGBFeatureSequence(driver: driver, device: device, payloads: payloads)
 }
 
 func sendUnsafeCandidateFeatureSequence(_ payloads: [[UInt8]], writeIndex: Int, kind: String) throws {
@@ -2020,24 +2255,20 @@ func runSelfTest(verbose: Bool = true) throws {
     try assertSelfTest(Array(persistentLightingSequence[10][62..<64]) == [0xAA, 0x55], "persistent RGB sequence marker")
     try assertSelfTest(Array(persistentLightingSequence[11].prefix(2)) == [0x04, 0x02], "persistent RGB commit report")
     try assertSelfTest(Array(persistentLightingSequence[12].prefix(2)) == [0x04, 0xF0], "persistent RGB finish report")
+    let liveCustomModeTable = try liveCustomModeRGBTable(assignments: persistentAssignments)
+    try assertSelfTest(liveCustomModeTable.count == 0x244, "live custom-mode RGB table length")
+    try assertSelfTest(Array(liveCustomModeTable[0x09C..<0x0A0]) == [0x27, 0xFF, 0x00, 0x00], "live custom-mode W RGB record")
+    let liveCustomModeSequence = liveCustomModeRGBFeatureSequence(table: liveCustomModeTable)
+    try assertSelfTest(liveCustomModeSequence.count == 10, "live custom-mode RGB sequence report count")
+    try assertSelfTest(Array(liveCustomModeSequence[0].prefix(2)) == [0x04, 0x20] && liveCustomModeSequence[0][8] == 0x08, "live custom-mode RGB selector report")
+    try assertSelfTest(Array(liveCustomModeSequence[9].prefix(2)) == [0x04, 0x02], "live custom-mode RGB commit report")
     let nativePersistentSequence = try nativePersistentRGBFeatureSequence(table: persistentLightingTable)
-    try assertSelfTest(nativePersistentSequence.count == 18, "native persistent RGB sequence report count")
+    try assertSelfTest(nativePersistentSequence.count == 13, "native persistent RGB sequence report count")
     try assertSelfTest(Array(nativePersistentSequence[0].prefix(2)) == [0x04, 0x18], "native persistent RGB begin report")
     try assertSelfTest(Array(nativePersistentSequence[1].prefix(2)) == [0x04, 0x23] && nativePersistentSequence[1][8] == 0x09, "native persistent RGB selector report")
     try assertSelfTest(Array(nativePersistentSequence[10][62..<64]) == [0xAA, 0x55], "native persistent RGB table marker")
     try assertSelfTest(Array(nativePersistentSequence[11].prefix(2)) == [0x04, 0x02], "native persistent RGB table commit report")
     try assertSelfTest(Array(nativePersistentSequence[12].prefix(2)) == [0x04, 0xF0], "native persistent RGB table finish report")
-    try assertSelfTest(Array(nativePersistentSequence[13].prefix(2)) == [0x04, 0x18], "native persistent RGB activation begin report")
-    try assertSelfTest(Array(nativePersistentSequence[14].prefix(2)) == [0x04, 0x13] && nativePersistentSequence[14][8] == 0x01, "native persistent RGB activation selector report")
-    try assertSelfTest(
-        nativePersistentSequence[15][0] == 0x80 &&
-            nativePersistentSequence[15][9] == 0x0F &&
-            nativePersistentSequence[15][10] == 0x0F &&
-            Array(nativePersistentSequence[15][14..<16]) == [0xAA, 0x55],
-        "native persistent RGB activation payload"
-    )
-    try assertSelfTest(Array(nativePersistentSequence[16].prefix(2)) == [0x04, 0x02], "native persistent RGB activation commit report")
-    try assertSelfTest(Array(nativePersistentSequence[17].prefix(2)) == [0x04, 0xF0], "native persistent RGB activation finish report")
     let dimmedLightingTable = try customLightingRGBTable(assignments: profileAssignments, brightnessScale: 0x80)
     try assertSelfTest(Array(dimmedLightingTable[0x09C..<0x0A0]) == [0x27, 0x7F, 0x00, 0x00], "custom lighting Windows brightness scaling")
     let lightingSequence = customLightingRGBFeatureSequence(table: lightingTable)
@@ -2084,31 +2315,48 @@ func runSelfTest(verbose: Bool = true) throws {
         _ = try parseUnsafeCandidateNameOptions(["wasd-steps"], kind: "lighting-mode preset")
     }
     let breathEffect = try lightingEffect(named: "breath")
-    try assertSelfTest(breathEffect.value == 0x06, "lighting effect lookup")
-    let breathEffectAssignments = lightingEffectAssignments(breathEffect)
+    try assertSelfTest(breathEffect.value == 0x07, "lighting effect lookup")
     try assertSelfTest(
-        breathEffectAssignments.count == physicalKeysByLightIndex().count &&
-            breathEffectAssignments.first { $0.label == "W" }?.value == 0x06,
-        "lighting effect assignments"
+        breathEffect.colorType == 0 &&
+            [breathEffect.red, breathEffect.green, breathEffect.blue] == [0xFF, 0xFF, 0xFF] &&
+            [breathEffect.byte5, breathEffect.byte6, breathEffect.byte7] == [0x00, 0x0F, 0x06],
+        "lighting effect DB fields"
     )
-    let breathEffectTable = try lightingModeTable(assignments: breathEffectAssignments)
-    try assertSelfTest(breathEffectTable[0x27] == 0x06 && breathEffectTable[0x38] == 0x06, "lighting effect table")
+    let breathEffectSequence = try nativeLightingEffectFeatureSequence(effect: breathEffect, color: [0x00, 0x00, 0xFF])
+    try assertSelfTest(breathEffectSequence.count == 5, "native lighting effect sequence report count")
+    try assertSelfTest(Array(breathEffectSequence[0].prefix(2)) == [0x04, 0x18], "native lighting effect begin report")
+    try assertSelfTest(Array(breathEffectSequence[1].prefix(2)) == [0x04, 0x13] && breathEffectSequence[1][8] == 0x01, "native lighting effect selector report")
+    try assertSelfTest(
+        Array(breathEffectSequence[2][0...3]) == [0x07, 0x00, 0x00, 0xFF] &&
+            breathEffectSequence[2][8] == 0x00 &&
+            breathEffectSequence[2][9] == 0x10 &&
+            breathEffectSequence[2][10] == 0x07 &&
+            breathEffectSequence[2][11] == 0x00 &&
+            Array(breathEffectSequence[2][14...15]) == [0xAA, 0x55],
+        "native lighting effect mode/color payload"
+    )
+    try assertSelfTest(Array(breathEffectSequence[3].prefix(2)) == [0x04, 0x02], "native lighting effect commit report")
+    try assertSelfTest(Array(breathEffectSequence[4].prefix(2)) == [0x04, 0xF0], "native lighting effect finish report")
+    let parsedBreathEffectOptions = try parseLightingEffectApplyOptions(["breath", "0000FF", "--write-index=4", "--colortype=0", "--byte6=0F"])
+    try assertSelfTest(
+        parsedBreathEffectOptions.name == "breath" &&
+            parsedBreathEffectOptions.color == [0x00, 0x00, 0xFF] &&
+            parsedBreathEffectOptions.colorType == 0 &&
+            parsedBreathEffectOptions.byte6 == 0x0F &&
+            !parsedBreathEffectOptions.hasUnsafeFlag &&
+            parsedBreathEffectOptions.writeIndex == 4,
+        "native lighting effect apply options"
+    )
+    let parsedLegacyUnsafeBreathEffectOptions = try parseLightingEffectApplyOptions(["breath", unsafeKeymapFlag])
+    try assertSelfTest(
+        parsedLegacyUnsafeBreathEffectOptions.name == "breath" &&
+            parsedLegacyUnsafeBreathEffectOptions.hasUnsafeFlag,
+        "native lighting effect accepts legacy unsafe flag"
+    )
     let breathEffectPath = tempDirectory.appendingPathComponent("breath-effect.hex").path
-    try writeFeatureSequenceFile(lightingModeFeatureSequence(table: breathEffectTable), path: breathEffectPath)
-    let validatedBreathEffect = try validateLightingModeFeatureSequenceFile(breathEffectPath, printSummary: false)
-    try assertSelfTest(validatedBreathEffect.count == 7, "lighting effect artifact validation")
-    let breathEffectJSON = byteRecordJSON(Array(validatedBreathEffect[2...4]), byteLimit: 0xBE, keyByLightIndex: keyMapByLightIndex())
-    let breathEffectSpecs = Set(breathEffectJSON.compactMap(\.spec))
-    try assertSelfTest(
-        breathEffectSpecs.contains("equal=06") &&
-            breathEffectSpecs.contains("pageup=06") &&
-            breathEffectSpecs.contains("left=06") &&
-            breathEffectSpecs.contains("0x49=06"),
-        "lighting effect parseable JSON specs"
-    )
-    try expectInvalidArgument("lighting effect unsafe guard") {
-        _ = try parseUnsafeCandidateNameOptions(["breath"], kind: "lighting effect")
-    }
+    try writeFeatureSequenceFile(breathEffectSequence, path: breathEffectPath)
+    let validatedBreathEffect = try validateShortOperationFeatureSequenceFile(breathEffectPath, printSummary: false)
+    try assertSelfTest(validatedBreathEffect == breathEffectSequence, "native lighting effect artifact validation")
 
     let alternateFullTableSequence = alternateFullTableFeatureSequence(table: keymapTable)
     try assertSelfTest(alternateFullTableSequence.count == 13, "alternate full-table sequence report count")
@@ -2330,7 +2578,7 @@ func windowsFeatureInventoryText() -> String {
       The English language resource and embedded SQLite schema identify these UI feature groups.
 
     Implemented with proven live RGB path:
-      - Per-key RGB readback/write through 04 F5 and the native 04 23 selector-09 table plus 04 13 activation path.
+      - Per-key RGB readback/write through 04 F5 and the native 04 23 selector-09 table as feature report 0x00 frames.
       - RGB save, restore, backups, built-in presets, and combined profile RGB sections.
 
     Implemented as app-local profile/library features:
@@ -2357,8 +2605,9 @@ func windowsFeatureInventoryText() -> String {
 
     Persistence finding:
       The Windows custom RGB apply path observed at VA 0x41DCD0 sends 04 23 selector 09,
-      writes a 0x280-byte table with AA55 at 0x23E, commits with 04 02 / 04 F0, then
-      immediately calls the 0x41E050 short 04 13 static-80 activation path. The older
+      writes a 0x280-byte table with AA55 at 0x23E, and commits with 04 02 / 04 F0.
+      The board accepts that table on macOS when replayed as feature report 0x00 frames.
+      The 0x41E050 short 04 13 static-80 activation path is kept as a diagnostic path only. The older
       static RGB table path observed at VA 0x418500 and 0x425E03 sends 04 20, writes
       table chunks, then sends 04 02; it is retained as --legacy-table. No separate RGB
       save-to-flash opcode has been proven. Brightness in the Windows custom-lighting path
@@ -2414,7 +2663,7 @@ func protocolCandidatesText() -> String {
         table:   selector 03 declares 0x100 bytes; AA 55 marker at table offset 0xBE
         commit:  04 02
         finish:  04 F0
-        status:  selector 03 export/validate and Windows-named effect artifacts implemented; selector 09 RGB export models Windows brightness scaling with (channel * scale) >> 8; normal RGB writes use selector 09 plus short 04 13 activation
+        status:  selector 03 export/validate and Windows-named effect artifacts implemented; selector 09 RGB export models Windows brightness scaling with (channel * scale) >> 8; normal RGB writes use selector 09 as feature report 0x00 frames
 
       Macro firmware table container
         begin:   04 19
