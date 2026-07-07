@@ -264,7 +264,7 @@ enum RGBWriteMode {
     var description: String {
         switch self {
         case .persistentCustomLighting:
-            return "proven custom-lighting RGB table upload (04 23 selector 09 as feature report 0x00)"
+            return "custom-lighting RGB table upload (04 23 selector 09 as feature report 0x00)"
         case .legacyTable:
             return "legacy static RGB table path (04 20 / table chunks / 04 02)"
         }

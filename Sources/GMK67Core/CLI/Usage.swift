@@ -27,7 +27,7 @@ func printUsage() {
           Print a concise driver/app readiness report without sending HID reports.
 
       protocol-candidates
-          Print proven and candidate vendor protocol command families without HID.
+          Print modeled and candidate vendor protocol command families without HID.
 
       windows-features
           Print the extracted Windows app feature inventory and implementation status without HID.
@@ -425,7 +425,7 @@ func printUsage() {
           Write the native 04 13 built-in lighting effect mode+color sequence without HID.
 
       lighting-effect-apply <effect-name> [rrggbb] [--write-index=N] [--colortype=N] [--byte5=N] [--byte6=N] [--byte7=N]
-          Apply the confirmed native 04 13 built-in lighting effect mode+color payload.
+          Send the reverse-engineered 04 13 built-in lighting effect mode+color payload.
 
       lighting-mode-validate <path> [--json]
           Validate an exported candidate lighting-mode table sequence without HID.

@@ -1311,33 +1311,13 @@ func run(_ args: [String]) throws {
         try writeFeatureSequenceFile(sequence, path: path)
         let payload = sequence[2]
         print("Saved \(sequence.count) native lighting effect reports for \(effect.name) to \(path). No HID device was opened.")
-        print(String(format: "Payload: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
-                     payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
+        print(String(format: "Payload: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte9=0x%02X byte10=0x%02X byte5=0x%02X (%@).",
+                     payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11], "byte6/byte7 + 1"))
         print("This models the Windows 04 18 / 04 13 mode+color path from the selected t_light_data row.")
 
     case "lighting-effect-apply":
         let options = try parseLightingEffectApplyOptions(Array(args.dropFirst(2)))
-        let effect = try lightingEffect(named: options.name)
-        let sequence = try nativeLightingEffectFeatureSequence(
-            effect: effect,
-            color: options.color,
-            colorType: options.colorType,
-            byte5: options.byte5,
-            byte6: options.byte6,
-            byte7: options.byte7
-        )
-        let payload = sequence[2]
-        let driver = HIDDriver()
-        let devices = driver.devices()
-        guard devices.indices.contains(options.writeIndex) else {
-            throw DriverError.noDevice
-        }
-        let device = try driver.device(at: options.writeIndex, configurationOnly: false)
-        print(String(format: "Applying native lighting effect %@: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
-                     effect.name, payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
-        print("Write path: Windows-style 04 18 / 04 13 mode+color payload / 04 02 / 04 F0 using feature report 0x00 transport.")
-        try sendNativeLightingEffectFeatureSequence(driver: driver, device: device, payloads: sequence)
-        print("Native lighting effect sequence sent.")
+        try applyNativeLightingEffect(options)
 
     case "effect-list":
         guard args.count == 2 else {
@@ -1348,27 +1328,7 @@ func run(_ args: [String]) throws {
 
     case "effect-apply":
         let options = try parseLightingEffectApplyOptions(Array(args.dropFirst(2)))
-        let effect = try lightingEffect(named: options.name)
-        let sequence = try nativeLightingEffectFeatureSequence(
-            effect: effect,
-            color: options.color,
-            colorType: options.colorType,
-            byte5: options.byte5,
-            byte6: options.byte6,
-            byte7: options.byte7
-        )
-        let payload = sequence[2]
-        let driver = HIDDriver()
-        let devices = driver.devices()
-        guard devices.indices.contains(options.writeIndex) else {
-            throw DriverError.noDevice
-        }
-        let device = try driver.device(at: options.writeIndex, configurationOnly: false)
-        print(String(format: "Applying native lighting effect %@: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte6+1=0x%02X byte7+1=0x%02X byte5=0x%02X.",
-                     effect.name, payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11]))
-        print("Write path: Windows-style 04 18 / 04 13 mode+color payload / 04 02 / 04 F0 using feature report 0x00 transport.")
-        try sendNativeLightingEffectFeatureSequence(driver: driver, device: device, payloads: sequence)
-        print("Native lighting effect sequence sent.")
+        try applyNativeLightingEffect(options)
 
     case "lighting-mode-validate":
         let wantsJSON = args.contains("--json")

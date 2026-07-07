@@ -145,6 +145,14 @@ nav button:hover {
   width: auto;
 }
 
+.toggle.inline {
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #49544f;
+}
+
 main {
   display: flex;
   flex-direction: column;
@@ -423,6 +431,115 @@ main {
 .tabBar button.active {
   background: #ffffff;
   border-color: #c7cdc4;
+}
+
+.effectsWorkspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.85fr) minmax(320px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.effectList {
+  display: grid;
+  gap: 6px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.effectList button {
+  display: grid;
+  gap: 3px;
+  min-height: 56px;
+  padding: 9px 10px;
+  text-align: left;
+  justify-items: start;
+}
+
+.effectList button.active {
+  border-color: #2fb39d;
+  background: #e8f7f3;
+  box-shadow: inset 3px 0 0 #2fb39d;
+}
+
+.effectList strong {
+  font-size: 13px;
+}
+
+.effectList span {
+  color: #65716a;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.effectEditor {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.effectPreview {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  border: 1px solid #cfd7d0;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at center, var(--effect-color) 0 18%, transparent 19%),
+    conic-gradient(from 90deg, #ff4d4d, #ffd34d, #3dcc78, #3fa7ff, #7a5cff, #ff4fd8, #ff4d4d);
+}
+
+.effectPreview input[type="color"] {
+  width: 112px;
+  height: 112px;
+  padding: 0;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(16, 30, 26, 0.2);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.effectPreview input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.effectPreview input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+}
+
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+}
+
+.swatchGrid button {
+  min-height: 34px;
+  border-radius: 6px;
+  background: var(--swatch-color);
+}
+
+.swatchGrid button.active {
+  border-color: #202420;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #2fb39d;
+}
+
+.rangeControl span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rangeControl strong {
+  color: #202420;
+  font-size: 12px;
+}
+
+.rangeControl input[type="range"] {
+  padding: 0;
 }
 
 .keymapNotice {

@@ -108,7 +108,7 @@ struct LightingPanel: View {
                 Toggle("Allow unsafe lighting writes", isOn: $model.unsafeKeymapWrites)
                     .toggleStyle(.checkbox)
 
-                Text("Custom lighting profiles and test-pattern writes require the unsafe toggle. Built-in effects use the confirmed mode+color path.")
+                Text("Custom lighting profiles and test-pattern writes require the unsafe toggle. Built-in effects use a reverse-engineered mode+color path whose physical effect change is not yet verified.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if model.deviceStatusKind != .ready {

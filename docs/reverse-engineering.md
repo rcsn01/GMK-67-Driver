@@ -108,7 +108,7 @@ Current driver status:
   diagnostics report and support bundle through the Device panel, has buttons
   for requesting/opening Input Monitoring permission, and can save/list/preview/
   export/apply/delete named profiles through the Keyboard Profile panel.
-- `gmk67 protocol-candidates` is a read-only report of proven RGB opcodes and
+- `gmk67 protocol-candidates` is a read-only report of modeled RGB opcodes and
   unproven lighting/profile opcode families identified in `DeviceDriver.exe`.
 - `gmk67 windows-features` is a read-only implementation-status inventory
   derived from the extracted Windows language resources, SQLite table strings,
@@ -177,11 +177,11 @@ Current driver status:
   physical keys, then applies per-key overrides. The result can be checked with
   `rgb-restore-dry-run` and applied with `rgb-restore`.
 - `gmk67 rgb-preset-*` commands are higher-level driver/app presets layered on
-  the proven RGB table format. Applying one still uses the same `04 20` table
+  the modeled RGB table format. Applying one still uses the same `04 20` table
   write path and automatic pre-write backup.
 - `gmk67 profile-preset-*` commands are app/driver convenience presets, not a
   separate vendor protocol family. They compose a named RGB preset with an
-  optional named keymap preset; applying one uses the proven RGB table path
+  optional named keymap preset; applying one uses the modeled RGB table path
   first and only sends keymap reports when the preset includes a keymap and the
   caller passes `--unsafe-no-backup`.
 - Combined profile JSON files can also include optional custom RGB fill,
@@ -358,7 +358,7 @@ Lighting/profile candidates:
 - These can plausibly overwrite lighting profiles or custom lighting state, so
   live writes remain guarded until a matching readback/restore path is known.
 - `gmk67 factory-reset-*` is a modeled reset, not a discovered vendor reset
-  opcode. It composes known table operations: RGB clear via the proven RGB table
+  opcode. It composes known table operations: RGB clear via the modeled RGB table
   path plus an empty custom-keymap table via the guarded keymap path.
 
 Current blocker:

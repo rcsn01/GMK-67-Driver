@@ -36,7 +36,7 @@ export function registerIPC(runner: BackendRunner): void {
       "effect-apply",
       requireNonEmpty(payload.effect, "Effect"),
       ...(payload.color ? [normalizeHexColor(payload.color)] : []),
-      ...numericOption("write-index", payload.writeIndex),
+      ...numericOption("write-index", payload.writeIndex ?? 0),
       ...numericOption("colortype", payload.colorType),
       ...numericOption("byte5", payload.byte5),
       ...numericOption("byte6", payload.byte6),

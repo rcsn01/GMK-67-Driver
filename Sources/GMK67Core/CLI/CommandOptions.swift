@@ -883,7 +883,7 @@ func nativePersistentRGBFeatureSequence(table: [UInt8]) throws -> [[UInt8]] {
     // The board accepts this table when it is replayed as raw feature report
     // ID 0x00 frames. The later 04 13 activation call observed in the Windows
     // binary can clear or hide the table on this macOS path, so keep normal RGB
-    // writes to the proven selector-09 table upload.
+    // writes to the selector-09 table upload.
     var sequence = customLightingRGBFeatureSequence(table: table)
     if ProcessInfo.processInfo.environment["GMK67_RGB_SEND_ACTIVATION"] == "1" {
         sequence += try shortOperationTemplateFeatureSequence(variant: "static-80")
@@ -1510,6 +1510,16 @@ func sendWindowsFramedFeatureSequence(driver: HIDDriver, device: IOHIDDevice, pa
     }
 }
 
+func sendNativeLightingEffectFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
+    try sendFeature64Sequence(driver: driver, device: device, payloads: payloads)
+}
+
+func sendLightingEffectModeTableSequence(driver: HIDDriver, device: IOHIDDevice, effect: LightingEffectDefinition) throws {
+    let assignments = lightingEffectAssignments(effect)
+    let table = try lightingModeTable(assignments: assignments)
+    try sendFeatureSequence(driver: driver, device: device, payloads: lightingModeFeatureSequence(table: table))
+}
+
 func sendPersistentRGBFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
     switch try persistentRGBFeatureSequenceTransport() {
     case .defaultMixed:
@@ -1523,8 +1533,30 @@ func sendPersistentRGBFeatureSequence(driver: HIDDriver, device: IOHIDDevice, pa
     }
 }
 
-func sendNativeLightingEffectFeatureSequence(driver: HIDDriver, device: IOHIDDevice, payloads: [[UInt8]]) throws {
-    try sendPersistentRGBFeatureSequence(driver: driver, device: device, payloads: payloads)
+func applyNativeLightingEffect(_ options: (name: String, color: [UInt8]?, colorType: UInt8?, byte5: UInt8?, byte6: UInt8?, byte7: UInt8?, hasUnsafeFlag: Bool, writeIndex: Int)) throws {
+    let effect = try lightingEffect(named: options.name)
+    let sequence = try nativeLightingEffectFeatureSequence(
+        effect: effect,
+        color: options.color,
+        colorType: options.colorType,
+        byte5: options.byte5,
+        byte6: options.byte6,
+        byte7: options.byte7
+    )
+    let payload = sequence[2]
+    let driver = HIDDriver()
+    let devices = driver.devices()
+    guard devices.indices.contains(options.writeIndex) else {
+        throw DriverError.noDevice
+    }
+    let device = try driver.device(at: options.writeIndex, configurationOnly: false)
+    print(String(format: "Applying native lighting effect %@: mode=0x%02X rgb=%02X %02X %02X colortype=0x%02X byte9=0x%02X byte10=0x%02X byte5=0x%02X (%@).",
+                 effect.name, payload[0], payload[1], payload[2], payload[3], payload[8], payload[9], payload[10], payload[11], "byte6/byte7 + 1"))
+    print("Write path: selector-03 per-key effect-mode table, then macOS 64-byte 04 13 mode/color feature reports.")
+    try sendLightingEffectModeTableSequence(driver: driver, device: device, effect: effect)
+    usleep(60_000)
+    try sendNativeLightingEffectFeatureSequence(driver: driver, device: device, payloads: sequence)
+    print("Native lighting effect sequence sent.")
 }
 
 func sendUnsafeCandidateFeatureSequence(_ payloads: [[UInt8]], writeIndex: Int, kind: String) throws {
@@ -2715,7 +2747,7 @@ func windowsFeatureInventoryText() -> String {
       DeviceDriver.exe imports HidD_SetFeature/GetFeature and stores editor state in local SQLite tables.
       The English language resource and embedded SQLite schema identify these UI feature groups.
 
-    Implemented with proven live RGB path:
+    Implemented with modeled live RGB path:
       - Per-key RGB readback/write through 04 F5 and the native 04 23 selector-09 table as feature report 0x00 frames.
       - RGB save, restore, backups, built-in presets, and combined profile RGB sections.
 
@@ -2744,7 +2776,7 @@ func windowsFeatureInventoryText() -> String {
     Persistence finding:
       The Windows custom RGB apply path observed at VA 0x41DCD0 sends 04 23 selector 09,
       writes a 0x280-byte table with AA55 at 0x23E, and commits with 04 02 / 04 F0.
-      The board accepts that table on macOS when replayed as feature report 0x00 frames.
+      The board has accepted that table on macOS when replayed as feature report 0x00 frames, but live writes still require hardware readback verification.
       The 0x41E050 short 04 13 static-80 activation path is kept as a diagnostic path only. The older
       static RGB table path observed at VA 0x418500 and 0x425E03 sends 04 20, writes
       table chunks, then sends 04 02; it is retained as --legacy-table. No separate RGB
@@ -2757,7 +2789,7 @@ func protocolCandidatesText() -> String {
     """
     GMK67 protocol candidates from DeviceDriver.exe
 
-    Proven:
+    Modeled:
       RGB readback
         request: 04 F5, byte8 = 03 or 09
         read:    input report 00, 64-byte chunks
@@ -2992,7 +3024,7 @@ func supportBundleSummaryText(directory: String) -> String {
       diagnostics.txt
         Read-only resource, USB discovery, protocol, and safety report.
       protocol-candidates.txt
-        Proven RGB commands and candidate guarded command families.
+        Modeled RGB commands and candidate guarded command families.
       validation-plan.txt
         Step-by-step physical validation checklist for live testing.
       layout.txt

@@ -833,7 +833,7 @@ func printEffectPresetList() {
             print("    aliases: \(effect.aliases.joined(separator: ", "))")
         }
     }
-    print("Live animated effect selection uses the confirmed native 04 13 mode+color payload.")
+    print("Live animated effect selection uses the reverse-engineered native 04 13 mode+color payload.")
     print("Use lighting-effect-apply to send a mode, optional color, and DB-backed option bytes.")
 }
 

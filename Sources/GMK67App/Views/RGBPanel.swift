@@ -103,7 +103,7 @@ struct RGBPanel: View {
                 }
             }
 
-            Text("Built-in firmware effect modes use the confirmed mode+color write path.")
+            Text("Built-in firmware effect modes use a reverse-engineered mode+color write path whose physical effect change is not yet verified.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

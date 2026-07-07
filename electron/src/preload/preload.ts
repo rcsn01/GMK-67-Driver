@@ -25,7 +25,7 @@ const api: GMK67API = {
     setAll: (color) => invoke("gmk67:rgb:set-all", { color }),
     clear: () => invoke("gmk67:command", { args: ["rgb-clear"] }),
     map: (specs) => invoke("gmk67:command", { args: ["rgb-map", ...specs] }),
-    dump: () => invoke("gmk67:json", { args: ["rgb-dump", "--json"] }),
+    dump: () => invoke("gmk67:json", { args: ["rgb-dump", "0", "0", "9", "--json"] }),
   },
   keymap: {
     presetList: () => invoke("gmk67:command", { args: ["keymap-preset-list"] }),

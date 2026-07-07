@@ -27,7 +27,7 @@ Working today:
 - Native macOS app and CLI.
 - USB HID discovery and readiness diagnostics.
 - Input Monitoring permission request/status helpers.
-- Proven RGB readback and RGB table write path.
+- RGB readback and modeled RGB table write path with verification.
 - Built-in RGB presets and one-click RGB presets in the app.
 - RGB profile save, restore, dry-run validation, automatic backups, and latest-backup restore.
 - Combined profile files that compose RGB presets, custom RGB maps, and optional keymap data.
@@ -152,7 +152,7 @@ Scripts/install-app.sh --dest /path/to/folder
 The app provides:
 
 - Device readiness, diagnostics, permission request, and support bundle export.
-- One-click RGB presets using the proven RGB write path.
+- One-click RGB presets using the RGB table write path, with readback verification required.
 - Visual keyboard editor for RGB assignments and remap specs.
 - RGB save, restore, backup listing, latest-backup restore, and profile creation.
 - Combined profile creation, preview, export, apply, and app-local library management.
@@ -331,7 +331,7 @@ Live candidate lighting writes require `--unsafe-no-backup`:
 .build/debug/gmk67 keyboard-settings-apply keyboard-settings.hex --unsafe-no-backup
 ```
 
-These commands may not visibly change lighting. The known reliable path for color changes is the RGB preset/table path.
+These commands may not visibly change lighting. The RGB preset/table path is the main modeled color path, but hardware readback should be checked after writes.
 
 ## Safety Notes
 
