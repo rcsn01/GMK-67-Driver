@@ -246,8 +246,17 @@ main {
 .mainGrid {
   flex: 1;
   min-height: 0;
-  margin-top: 14px;
+  margin-top: 12px;
   overflow: hidden;
+}
+
+.keyboardDock {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  border: 1px solid #cfd7d0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px 14px 2px;
 }
 
 .workArea {
@@ -284,6 +293,11 @@ main {
 .keyboardRow {
   display: flex;
   gap: 6px;
+}
+
+.keyboardSpacer {
+  flex: 0 0 auto;
+  height: 38px;
 }
 
 .keyButton {
@@ -325,6 +339,10 @@ main {
 .keyButton.fnSource {
   border-color: #c99a2e;
   box-shadow: 0 0 0 2px rgba(201, 154, 46, 0.2);
+}
+
+.keyButton.readOnly {
+  cursor: default;
 }
 
 .formGrid {
@@ -379,6 +397,32 @@ main {
   background: #2fb39d;
   border-color: #269784;
   color: #061311;
+}
+
+.tabBar {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border: 1px solid #c7cdc4;
+  border-radius: 7px;
+  background: #eef2ef;
+  padding: 3px;
+}
+
+.tabBar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.tabBar button.active {
+  background: #ffffff;
+  border-color: #c7cdc4;
 }
 
 .keymapNotice {
@@ -491,41 +535,6 @@ label,
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
-}
-
-.libraryList,
-.editorStack {
-  display: grid;
-  gap: 10px;
-}
-
-.libraryRow {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 10px;
-  align-items: center;
-  border: 1px solid #e0e6e1;
-  border-radius: 8px;
-  padding: 10px;
-}
-
-.libraryRow span {
-  display: inline-block;
-  margin-left: 8px;
-  color: #65716a;
-  font-size: 12px;
-}
-
-.libraryRow p {
-  margin: 4px 0 0;
-}
-
-.emptyState {
-  border: 1px dashed #cfd7d0;
-  border-radius: 8px;
-  color: #65716a;
-  padding: 18px;
-  text-align: center;
 }
 
 .deviceGrid {

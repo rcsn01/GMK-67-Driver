@@ -49,26 +49,6 @@ export interface RGBRecord {
   rgb: string;
 }
 
-export interface ProfileLibraryEntry {
-  slot: string;
-  name: string;
-  rgbPreset: string;
-  keymapPreset?: string | null;
-  customRGB: number;
-  customRemaps: number;
-}
-
-export interface CombinedProfile {
-  format: string;
-  version: number;
-  name: string;
-  rgbPreset: string;
-  keymapPreset?: string | null;
-  rgbFill?: string | null;
-  rgbAssignments?: string[] | null;
-  keymapRemaps?: string[] | null;
-}
-
 export interface KeymapLibraryEntry {
   slot: string;
   name: string;
@@ -80,29 +60,6 @@ export interface KeymapProfile {
   version: number;
   name: string;
   remaps: string[];
-}
-
-export interface MacroLibraryEntry {
-  slot: string;
-  name: string;
-  repeatCount: number;
-  eventCount: number;
-}
-
-export interface MacroEvent {
-  type: string;
-  key?: string | null;
-  usage?: string | null;
-  text?: string | null;
-  delayMS?: number | null;
-}
-
-export interface MacroProfile {
-  format: string;
-  version: number;
-  name: string;
-  repeatCount: number;
-  events: MacroEvent[];
 }
 
 export interface RGBPreset {
@@ -153,20 +110,10 @@ export interface GMK67API {
     themeShow(layout: string, theme: string): Promise<RGBPreset>;
     applyPreset(name: string): Promise<CommandResult>;
     applyTheme(layout: string, theme: string): Promise<CommandResult>;
-    setKey(key: string, color: string): Promise<CommandResult>;
     setAll(color: string): Promise<CommandResult>;
     clear(): Promise<CommandResult>;
     map(specs: string[]): Promise<CommandResult>;
     dump(): Promise<RGBRecord[]>;
-  };
-  profiles: {
-    presetList(): Promise<CommandResult>;
-    presetShow(name: string, editable?: boolean): Promise<CombinedProfile>;
-    list(): Promise<ProfileLibraryEntry[]>;
-    show(slot: string): Promise<CombinedProfile>;
-    create(options: { slot?: string; name: string; rgbPreset: string; keymapPreset?: string | null; rgbFill?: string; rgbAssignments?: string[]; keymapRemaps?: string[] }): Promise<CommandResult>;
-    apply(slot: string, unsafeKeymapWrites?: boolean): Promise<CommandResult>;
-    delete(slot: string): Promise<CommandResult>;
   };
   keymap: {
     presetList(): Promise<CommandResult>;
@@ -175,12 +122,6 @@ export interface GMK67API {
     show(slot: string): Promise<KeymapProfile>;
     create(options: { slot?: string; name: string; remaps: string[] }): Promise<CommandResult>;
     apply(slot: string, unsafeKeymapWrites?: boolean): Promise<CommandResult>;
-    delete(slot: string): Promise<CommandResult>;
-  };
-  macros: {
-    list(): Promise<MacroLibraryEntry[]>;
-    show(slot: string): Promise<MacroProfile>;
-    create(options: { slot?: string; name: string; repeatCount: number; events: string[] }): Promise<CommandResult>;
     delete(slot: string): Promise<CommandResult>;
   };
   files: {

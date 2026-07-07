@@ -1,20 +1,19 @@
-import { Activity, Bug, Cpu, Keyboard, Layers3, Lightbulb, Play, Save, Search, SlidersHorizontal, Sparkles, Usb } from "lucide-react";
+import { Bug, Cpu, Keyboard, Lightbulb, Play, Save, Search, SlidersHorizontal, Sparkles, Usb } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Console } from "./components/Console";
 import { StatusBanner } from "./components/StatusBanner";
 import { VisualKeyboard } from "./components/VisualKeyboard";
-import type { CommandLogEntry, CommandResult, KeymapLibraryEntry, MacroLibraryEntry, ProfileLibraryEntry, ReadinessReport, RGBRecord } from "../../shared/types";
+import type { CommandLogEntry, CommandResult, KeymapLibraryEntry, ReadinessReport, RGBRecord } from "../../shared/types";
 import { normalizeHexColor, splitSpecs } from "../../shared/validation";
 
-type Page = "rgb" | "profiles" | "keymap" | "macros" | "device" | "developer";
+type Page = "rgb" | "keymap" | "device" | "developer";
 type KeymapLayer = "top" | "fn";
 type FnMode = "momentary" | "toggle";
+type RGBTab = "static" | "effects";
 
 const navItems: Array<{ page: Page; label: string; icon: typeof Lightbulb }> = [
   { page: "rgb", label: "RGB", icon: Lightbulb },
-  { page: "profiles", label: "Profiles", icon: Layers3 },
   { page: "keymap", label: "Keymap", icon: Keyboard },
-  { page: "macros", label: "Macros", icon: Activity },
   { page: "device", label: "Device", icon: Usb },
   { page: "developer", label: "Developer", icon: Bug },
 ];
@@ -77,7 +76,6 @@ export function App(): JSX.Element {
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [logs, setLogs] = useState<CommandLogEntry[]>([]);
   const [selectedKey, setSelectedKey] = useState("W");
-  const [selectedColor, setSelectedColor] = useState("FF0000");
   const [fillColor, setFillColor] = useState("000000");
   const [mapSpecs, setMapSpecs] = useState("W=FF0000 A=00FF00 S=0000FF D=00FFFF");
   const [effectName, setEffectName] = useState("breath");
@@ -86,12 +84,8 @@ export function App(): JSX.Element {
   const [themeLayout, setThemeLayout] = useState("wasd");
   const [themeName, setThemeName] = useState("rainbow");
   const [keyboardColors, setKeyboardColors] = useState<Map<string, string>>(new Map());
-  const [profiles, setProfiles] = useState<ProfileLibraryEntry[]>([]);
   const [keymaps, setKeymaps] = useState<KeymapLibraryEntry[]>([]);
-  const [macros, setMacros] = useState<MacroLibraryEntry[]>([]);
-  const [profileForm, setProfileForm] = useState({ slot: "gaming", name: "Gaming", rgbPreset: "wasd", keymapPreset: "wasd-arrows", rgbFill: "000000", rgbAssignments: "space=00FF00", keymapRemaps: "W=up A=left S=down D=right" });
   const [keymapForm, setKeymapForm] = useState({ slot: "wasd", name: "WASD Arrows", remaps: "W=up A=left S=down D=right" });
-  const [macroForm, setMacroForm] = useState({ slot: "combo", name: "Combo", repeatCount: "1", events: "down:control key:C up:control delay:50" });
   const [developerCommand, setDeveloperCommand] = useState("doctor");
   const [lastMessage, setLastMessage] = useState("");
   const [unsafeKeymapWrites, setUnsafeKeymapWrites] = useState(false);
@@ -99,6 +93,7 @@ export function App(): JSX.Element {
   const [selectedKeymapSlot, setSelectedKeymapSlot] = useState("");
   const [keymapLayer, setKeymapLayer] = useState<KeymapLayer>("top");
   const [fnMode, setFnMode] = useState<FnMode>("momentary");
+  const [rgbTab, setRGBTab] = useState<RGBTab>("static");
   const [targetKey, setTargetKey] = useState("up");
   const [fnLayerRemaps, setFnLayerRemaps] = useState("1=f1 2=f2 3=f3 4=f4 5=f5 6=f6 7=f7 8=f8 9=f9 0=f10 -=f11 equal=f12");
 
@@ -114,6 +109,12 @@ export function App(): JSX.Element {
   }, []);
 
   const canWrite = readiness?.status === "ready";
+
+  useEffect(() => {
+    if (page === "rgb" && canWrite) {
+      void syncRGBDump();
+    }
+  }, [page, canWrite]);
 
   async function run(action: () => Promise<CommandResult>): Promise<void> {
     try {
@@ -137,9 +138,7 @@ export function App(): JSX.Element {
 
   async function refreshLibraries(): Promise<void> {
     await Promise.allSettled([
-      window.gmk67.profiles.list().then(setProfiles),
       window.gmk67.keymap.list().then(setKeymaps),
-      window.gmk67.macros.list().then(setMacros),
     ]);
   }
 
@@ -147,7 +146,6 @@ export function App(): JSX.Element {
     try {
       const records = await window.gmk67.rgb.dump();
       setKeyboardColors(recordColors(records));
-      setLastMessage(`Loaded ${records.length} RGB record(s).`);
     } catch (error) {
       setLastMessage(error instanceof Error ? error.message : String(error));
     }
@@ -168,141 +166,112 @@ export function App(): JSX.Element {
     }
   }
 
+  const activeKeymapRemaps = keymapLayer === "top" ? keymapForm.remaps : fnLayerRemaps;
+  const activeKeymapMap = parseRemapText(activeKeymapRemaps);
+  const keymapKeyboardMappings = new Map([...activeKeymapMap.entries()].map(([source, target]) => [source, mappingLabel(target)]));
+
+  const keyboardDock = (
+    <div className="keyboardDock">
+      <VisualKeyboard
+        colorsByKey={page === "rgb" ? keyboardColors : new Map()}
+        selectedKey={page === "keymap" ? selectedKey : undefined}
+        sourceKey={page === "keymap" && keymapLayer === "fn" ? "fn" : null}
+        mappingsByKey={page === "keymap" ? keymapKeyboardMappings : undefined}
+        onSelect={page === "keymap"
+          ? (key) => {
+              setSelectedKey(key);
+              setTargetKey(activeKeymapMap.get(normalizeKeySpec(key)) ?? key);
+            }
+          : undefined}
+      />
+    </div>
+  );
+
   const renderedPage = useMemo(() => {
     switch (page) {
       case "rgb":
         return (
           <section className="workArea">
             <div className="panel">
-              <div className="panelHeader">
-                <div>
-                  <h2>Per-key RGB</h2>
-                  <p>{selectedKey} #{selectedColor}</p>
-                </div>
-                <button className="iconButton" onClick={syncRGBDump} title="Read RGB table">
-                  <Search size={17} />
+              <div className="tabBar" aria-label="RGB controls">
+                <button className={rgbTab === "static" ? "active" : ""} onClick={() => setRGBTab("static")}>
+                  <Sparkles size={16} />
+                  Static layouts
+                </button>
+                <button className={rgbTab === "effects" ? "active" : ""} onClick={() => setRGBTab("effects")}>
+                  <SlidersHorizontal size={16} />
+                  Built-in effects
                 </button>
               </div>
-              <VisualKeyboard selectedKey={selectedKey} colorsByKey={keyboardColors} onSelect={setSelectedKey} />
-              <div className="formGrid">
-                <label>
-                  Key
-                  <input value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)} />
-                </label>
-                <label>
-                  Color
-                  <input value={selectedColor} onChange={(event) => setSelectedColor(event.target.value.toUpperCase())} />
-                </label>
-                <button className="primaryButton" disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.setKey(selectedKey, normalizeHexColor(selectedColor)))}>
-                  <Save size={16} />
-                  Apply key
-                </button>
-              </div>
-            </div>
-            <div className="panel">
-              <div className="panelHeader">
-                <div>
-                  <h2>Static Layouts</h2>
-                  <p>Built-in presets and custom maps</p>
-                </div>
-                <Sparkles size={18} />
-              </div>
-              <div className="formGrid two">
-                <label>
-                  Fill
-                  <input value={fillColor} onChange={(event) => setFillColor(event.target.value.toUpperCase())} />
-                </label>
-                <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.setAll(normalizeHexColor(fillColor)))}>Set all</button>
-                <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.clear())}>Clear</button>
-                <label>
-                  Preset
-                  <input value={presetName} onChange={(event) => setPresetName(event.target.value)} />
-                </label>
-                <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyPreset(presetName))}>Apply preset</button>
-                <label>
-                  Layout
-                  <input value={themeLayout} onChange={(event) => setThemeLayout(event.target.value)} />
-                </label>
-                <label>
-                  Theme
-                  <input value={themeName} onChange={(event) => setThemeName(event.target.value)} />
-                </label>
-                <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyTheme(themeLayout, themeName))}>Apply theme</button>
-              </div>
-              <label className="stacked">
-                RGB map
-                <textarea value={mapSpecs} onChange={(event) => setMapSpecs(event.target.value)} />
-              </label>
-              <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.map(splitSpecs(mapSpecs)))}>Apply map</button>
-            </div>
-            <div className="panel">
-              <div className="panelHeader">
-                <div>
-                  <h2>Built-in Effects</h2>
-                  <p>Native animated modes</p>
-                </div>
-                <SlidersHorizontal size={18} />
-              </div>
-              <div className="formGrid">
-                <label>
-                  Effect
-                  <input value={effectName} onChange={(event) => setEffectName(event.target.value)} />
-                </label>
-                <label>
-                  Color
-                  <input value={effectColor} onChange={(event) => setEffectColor(event.target.value.toUpperCase())} />
-                </label>
-                <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyEffect({ effect: effectName, color: normalizeHexColor(effectColor) }))}>
-                  <Play size={16} />
-                  Apply effect
-                </button>
-              </div>
-              <button onClick={() => run(() => window.gmk67.rgb.effectList())}>List effects</button>
+              {rgbTab === "static" ? (
+                <>
+                  <div className="panelHeader">
+                    <div>
+                      <h2>Static Layouts</h2>
+                      <p>Built-in presets and custom maps</p>
+                    </div>
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="formGrid two">
+                    <label>
+                      Fill
+                      <input value={fillColor} onChange={(event) => setFillColor(event.target.value.toUpperCase())} />
+                    </label>
+                    <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.setAll(normalizeHexColor(fillColor)))}>Set all</button>
+                    <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.clear())}>Clear</button>
+                    <label>
+                      Preset
+                      <input value={presetName} onChange={(event) => setPresetName(event.target.value)} />
+                    </label>
+                    <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyPreset(presetName))}>Apply preset</button>
+                    <label>
+                      Layout
+                      <input value={themeLayout} onChange={(event) => setThemeLayout(event.target.value)} />
+                    </label>
+                    <label>
+                      Theme
+                      <input value={themeName} onChange={(event) => setThemeName(event.target.value)} />
+                    </label>
+                    <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyTheme(themeLayout, themeName))}>Apply theme</button>
+                  </div>
+                  <label className="stacked">
+                    RGB map
+                    <textarea value={mapSpecs} onChange={(event) => setMapSpecs(event.target.value)} />
+                  </label>
+                  <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.map(splitSpecs(mapSpecs)))}>Apply map</button>
+                </>
+              ) : (
+                <>
+                  <div className="panelHeader">
+                    <div>
+                      <h2>Built-in Effects</h2>
+                      <p>Native animated modes</p>
+                    </div>
+                    <SlidersHorizontal size={18} />
+                  </div>
+                  <div className="formGrid">
+                    <label>
+                      Effect
+                      <input value={effectName} onChange={(event) => setEffectName(event.target.value)} />
+                    </label>
+                    <label>
+                      Color
+                      <input value={effectColor} onChange={(event) => setEffectColor(event.target.value.toUpperCase())} />
+                    </label>
+                    <button disabled={!canWrite} onClick={() => run(() => window.gmk67.rgb.applyEffect({ effect: effectName, color: normalizeHexColor(effectColor) }))}>
+                      <Play size={16} />
+                      Apply effect
+                    </button>
+                  </div>
+                  <button onClick={() => run(() => window.gmk67.rgb.effectList())}>List effects</button>
+                </>
+              )}
             </div>
           </section>
         );
-      case "profiles":
-        return (
-          <LibraryPanel
-            title="Profiles"
-            entries={profiles.map((entry) => ({ id: entry.slot, title: entry.name, detail: `${entry.rgbPreset} / ${entry.keymapPreset ?? "no keymap"} / ${entry.customRGB} RGB / ${entry.customRemaps} remap(s)` }))}
-            onRefresh={refreshLibraries}
-            form={
-              <>
-                <div className="formGrid two">
-                  <input value={profileForm.slot} onChange={(event) => setProfileForm({ ...profileForm, slot: event.target.value })} placeholder="Slot" />
-                  <input value={profileForm.name} onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })} placeholder="Name" />
-                  <input value={profileForm.rgbPreset} onChange={(event) => setProfileForm({ ...profileForm, rgbPreset: event.target.value })} placeholder="RGB preset" />
-                  <input value={profileForm.keymapPreset} onChange={(event) => setProfileForm({ ...profileForm, keymapPreset: event.target.value })} placeholder="Keymap preset" />
-                </div>
-                <textarea value={profileForm.rgbAssignments} onChange={(event) => setProfileForm({ ...profileForm, rgbAssignments: event.target.value })} />
-                <textarea value={profileForm.keymapRemaps} onChange={(event) => setProfileForm({ ...profileForm, keymapRemaps: event.target.value })} />
-                <button onClick={() => run(async () => {
-                  const result = await window.gmk67.profiles.create({
-                    ...profileForm,
-                    rgbFill: profileForm.rgbFill,
-                    rgbAssignments: splitSpecs(profileForm.rgbAssignments),
-                    keymapRemaps: splitSpecs(profileForm.keymapRemaps),
-                  });
-                  await refreshLibraries();
-                  return result;
-                })}>Save profile</button>
-              </>
-            }
-            onApply={(slot) => run(() => window.gmk67.profiles.apply(slot, unsafeKeymapWrites))}
-            onDelete={(slot) => run(async () => {
-              const result = await window.gmk67.profiles.delete(slot);
-              await refreshLibraries();
-              return result;
-            })}
-          />
-        );
       case "keymap":
         {
-          const activeRemaps = keymapLayer === "top" ? keymapForm.remaps : fnLayerRemaps;
-          const activeRemapMap = parseRemapText(activeRemaps);
-          const keyboardMappings = new Map([...activeRemapMap.entries()].map(([source, target]) => [source, mappingLabel(target)]));
-          const currentTarget = activeRemapMap.get(normalizeKeySpec(selectedKey)) ?? "";
+          const currentTarget = activeKeymapMap.get(normalizeKeySpec(selectedKey)) ?? "";
           const updateActiveRemaps = (nextRemaps: string) => {
             if (keymapLayer === "top") {
               setKeymapForm({ ...keymapForm, remaps: nextRemaps });
@@ -315,10 +284,10 @@ export function App(): JSX.Element {
             if (!nextTarget) {
               return;
             }
-            updateActiveRemaps(setRemapInText(activeRemaps, selectedKey, nextTarget));
+            updateActiveRemaps(setRemapInText(activeKeymapRemaps, selectedKey, nextTarget));
           };
           const clearSelectedKey = () => {
-            updateActiveRemaps(setRemapInText(activeRemaps, selectedKey, ""));
+            updateActiveRemaps(setRemapInText(activeKeymapRemaps, selectedKey, ""));
           };
           return (
             <section className="workArea keymapWorkspace">
@@ -377,16 +346,6 @@ export function App(): JSX.Element {
                     : "Fn behavior: press Fn once, then press another key without holding Fn."}
                   {keymapLayer === "fn" && " Fn-layer mappings are modeled in the editor; backend support for writing a second layer is still pending."}
                 </div>
-                <VisualKeyboard
-                  selectedKey={selectedKey}
-                  sourceKey={keymapLayer === "fn" ? "fn" : null}
-                  colorsByKey={new Map()}
-                  mappingsByKey={keyboardMappings}
-                  onSelect={(key) => {
-                    setSelectedKey(key);
-                    setTargetKey(activeRemapMap.get(normalizeKeySpec(key)) ?? key);
-                  }}
-                />
                 <div className="keymapEditGrid">
                   <div className="mappingCard">
                     <span>Selected key</span>
@@ -405,7 +364,7 @@ export function App(): JSX.Element {
                 </div>
                 <label className="stacked">
                   {keymapLayer === "top" ? "Top layer remaps" : "Fn layer remaps"}
-                  <textarea value={activeRemaps} onChange={(event) => updateActiveRemaps(event.target.value)} />
+                  <textarea value={activeKeymapRemaps} onChange={(event) => updateActiveRemaps(event.target.value)} />
                 </label>
               </div>
 
@@ -434,39 +393,6 @@ export function App(): JSX.Element {
             </section>
           );
         }
-      case "macros":
-        return (
-          <LibraryPanel
-            title="Macros"
-            entries={macros.map((entry) => ({ id: entry.slot, title: entry.name, detail: `${entry.repeatCount} repeat / ${entry.eventCount} event(s)` }))}
-            onRefresh={refreshLibraries}
-            form={
-              <>
-                <div className="formGrid two">
-                  <input value={macroForm.slot} onChange={(event) => setMacroForm({ ...macroForm, slot: event.target.value })} placeholder="Slot" />
-                  <input value={macroForm.name} onChange={(event) => setMacroForm({ ...macroForm, name: event.target.value })} placeholder="Name" />
-                  <input value={macroForm.repeatCount} onChange={(event) => setMacroForm({ ...macroForm, repeatCount: event.target.value })} placeholder="Repeat" />
-                </div>
-                <textarea value={macroForm.events} onChange={(event) => setMacroForm({ ...macroForm, events: event.target.value })} />
-                <button onClick={() => run(async () => {
-                  const result = await window.gmk67.macros.create({
-                    slot: macroForm.slot,
-                    name: macroForm.name,
-                    repeatCount: Number(macroForm.repeatCount) || 1,
-                    events: splitSpecs(macroForm.events),
-                  });
-                  await refreshLibraries();
-                  return result;
-                })}>Save macro</button>
-              </>
-            }
-            onDelete={(slot) => run(async () => {
-              const result = await window.gmk67.macros.delete(slot);
-              await refreshLibraries();
-              return result;
-            })}
-          />
-        );
       case "device":
         return (
           <section className="workArea">
@@ -510,7 +436,7 @@ export function App(): JSX.Element {
           </section>
         );
     }
-  }, [page, selectedKey, selectedColor, fillColor, mapSpecs, effectName, effectColor, presetName, themeLayout, themeName, keyboardColors, profiles, keymaps, macros, profileForm, keymapForm, macroForm, developerCommand, canWrite, readiness, unsafeKeymapWrites, selectedKeymapSlot, keymapLayer, fnMode, targetKey, fnLayerRemaps]);
+  }, [page, selectedKey, fillColor, mapSpecs, effectName, effectColor, presetName, themeLayout, themeName, keymaps, keymapForm, developerCommand, canWrite, readiness, unsafeKeymapWrites, selectedKeymapSlot, keymapLayer, fnMode, rgbTab, targetKey, fnLayerRemaps, activeKeymapMap, activeKeymapRemaps]);
 
   return (
     <div className="appShell">
@@ -541,6 +467,7 @@ export function App(): JSX.Element {
       <main>
         <StatusBanner readiness={readiness} loading={loadingStatus} onRefresh={refreshStatus} onPermission={() => run(() => window.gmk67.device.permissionRequest())} />
         {lastMessage && <div className="messageStrip">{lastMessage}</div>}
+        {keyboardDock}
         <div className="mainGrid">{renderedPage}</div>
         <Console entries={logs} expanded={consoleExpanded} onExpandedChange={setConsoleExpanded} onClear={() => setLogs([])} />
       </main>
@@ -554,63 +481,5 @@ function Metric({ label, value }: { label: string; value: string }): JSX.Element
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
-  );
-}
-
-function LibraryPanel({
-  title,
-  entries,
-  form,
-  onRefresh,
-  onApply,
-  onDelete,
-}: {
-  title: string;
-  entries: Array<{ id: string; title: string; detail: string }>;
-  form: JSX.Element;
-  onRefresh: () => void;
-  onApply?: (slot: string) => void;
-  onDelete: (slot: string) => void;
-}): JSX.Element {
-  return (
-    <section className="workArea">
-      <div className="panel">
-        <div className="panelHeader">
-          <div>
-            <h2>{title} Library</h2>
-            <p>{entries.length} saved item(s)</p>
-          </div>
-          <button className="iconButton" onClick={onRefresh} title="Refresh library">
-            <Search size={16} />
-          </button>
-        </div>
-        <div className="libraryList">
-          {entries.length === 0 ? (
-            <div className="emptyState">No saved entries.</div>
-          ) : (
-            entries.map((entry) => (
-              <div className="libraryRow" key={entry.id}>
-                <div>
-                  <strong>{entry.title}</strong>
-                  <span>{entry.id}</span>
-                  <p>{entry.detail}</p>
-                </div>
-                {onApply && <button onClick={() => onApply(entry.id)}>Apply</button>}
-                <button onClick={() => onDelete(entry.id)}>Delete</button>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      <div className="panel">
-        <div className="panelHeader">
-          <div>
-            <h2>Editor</h2>
-            <p>Save to app library</p>
-          </div>
-        </div>
-        <div className="editorStack">{form}</div>
-      </div>
-    </section>
   );
 }

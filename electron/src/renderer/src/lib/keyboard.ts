@@ -1,12 +1,21 @@
 export interface VisualKey {
+  kind: "key";
   spec: string;
   label: string;
   width: number;
 }
 
-const key = (spec: string, label = spec, width = 38): VisualKey => ({ spec, label, width });
+export interface VisualSpacer {
+  kind: "spacer";
+  width: number;
+}
 
-export const visualKeyboardRows: VisualKey[][] = [
+export type VisualKeyboardItem = VisualKey | VisualSpacer;
+
+const key = (spec: string, label = spec, width = 38): VisualKey => ({ kind: "key", spec, label, width });
+const spacer = (width: number): VisualSpacer => ({ kind: "spacer", width });
+
+export const visualKeyboardRows: VisualKeyboardItem[][] = [
   [
     key("esc"),
     key("1"),
@@ -37,7 +46,7 @@ export const visualKeyboardRows: VisualKey[][] = [
     key("P"),
     key("["),
     key("]"),
-    key("\\|", "\\|", 64),
+    key("\\|", "\\|", 60),
     key("del"),
   ],
   [
@@ -53,7 +62,7 @@ export const visualKeyboardRows: VisualKey[][] = [
     key("L"),
     key(";"),
     key("quote", "'\""),
-    key("enter", "enter", 96),
+    key("enter", "enter", 94),
     key("pageup", "pg up"),
   ],
   [
@@ -79,6 +88,7 @@ export const visualKeyboardRows: VisualKey[][] = [
     key("space", "space", 286),
     key("0x5F", "alt", 48),
     key("fn", "fn", 48),
+    spacer(4),
     key("left", "left"),
     key("down", "down"),
     key("right", "right"),

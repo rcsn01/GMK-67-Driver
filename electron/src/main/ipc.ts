@@ -27,10 +27,6 @@ export function registerIPC(runner: BackendRunner): void {
     return parseJSON(await runner.run(args));
   });
 
-  ipcMain.handle("gmk67:rgb:set-key", async (_event, payload: { key: string; color: string }) => {
-    return runner.run(["rgb-set-key", requireNonEmpty(payload.key, "Key"), normalizeHexColor(payload.color)]);
-  });
-
   ipcMain.handle("gmk67:rgb:set-all", async (_event, payload: { color: string }) => {
     return runner.run(["rgb-set-all", normalizeHexColor(payload.color)]);
   });
@@ -49,36 +45,12 @@ export function registerIPC(runner: BackendRunner): void {
     return runner.run(args);
   });
 
-  ipcMain.handle("gmk67:profiles:create", async (_event, payload: { slot?: string; name: string; rgbPreset: string; keymapPreset?: string | null; rgbFill?: string; rgbAssignments?: string[]; keymapRemaps?: string[] }) => {
-    const args = [
-      "profile-library-create",
-      ...(payload.slot ? [`--slot=${payload.slot}`] : []),
-      `--name=${requireNonEmpty(payload.name, "Name")}`,
-      `--rgb=${requireNonEmpty(payload.rgbPreset, "RGB preset")}`,
-      `--keymap=${payload.keymapPreset || "none"}`,
-      ...(payload.rgbFill ? [`--rgb-fill=${normalizeHexColor(payload.rgbFill)}`] : []),
-      ...(payload.keymapRemaps ?? []).map((remap) => `--remap=${remap}`),
-      ...(payload.rgbAssignments ?? []),
-    ];
-    return runner.run(args);
-  });
-
   ipcMain.handle("gmk67:keymap:create", async (_event, payload: { slot?: string; name: string; remaps: string[] }) => {
     return runner.run([
       "keymap-library-create",
       ...(payload.slot ? [`--slot=${payload.slot}`] : []),
       `--name=${requireNonEmpty(payload.name, "Name")}`,
       ...payload.remaps.flatMap(splitSpecs),
-    ]);
-  });
-
-  ipcMain.handle("gmk67:macros:create", async (_event, payload: { slot?: string; name: string; repeatCount: number; events: string[] }) => {
-    return runner.run([
-      "macro-library-create",
-      ...(payload.slot ? [`--slot=${payload.slot}`] : []),
-      `--name=${requireNonEmpty(payload.name, "Name")}`,
-      `--repeat=${payload.repeatCount}`,
-      ...payload.events.flatMap(splitSpecs),
     ]);
   });
 

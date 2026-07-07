@@ -21,20 +21,10 @@ const api: GMK67API = {
     themeShow: (layout, theme) => invoke("gmk67:json", { args: ["rgb-theme-show", layout, theme, "--json"] }),
     applyPreset: (name) => invoke("gmk67:command", { args: ["rgb-preset-apply", name] }),
     applyTheme: (layout, theme) => invoke("gmk67:command", { args: ["rgb-theme-apply", layout, theme] }),
-    setKey: (key, color) => invoke("gmk67:rgb:set-key", { key, color }),
     setAll: (color) => invoke("gmk67:rgb:set-all", { color }),
     clear: () => invoke("gmk67:command", { args: ["rgb-clear"] }),
     map: (specs) => invoke("gmk67:command", { args: ["rgb-map", ...specs] }),
     dump: () => invoke("gmk67:json", { args: ["rgb-dump", "--json"] }),
-  },
-  profiles: {
-    presetList: () => invoke("gmk67:command", { args: ["profile-preset-list"] }),
-    presetShow: (name, editable = false) => invoke("gmk67:json", { args: ["profile-preset-show", name, editable ? "--editor-json" : "--json"] }),
-    list: () => invoke("gmk67:json", { args: ["profile-library-list", "--json"] }),
-    show: (slot) => invoke("gmk67:json", { args: ["profile-library-show", slot, "--json"] }),
-    create: (options) => invoke("gmk67:profiles:create", options),
-    apply: (slot, unsafeKeymapWrites = false) => invoke("gmk67:command", { args: ["profile-library-apply", slot, ...(unsafeKeymapWrites ? ["--unsafe-keymap-write"] : [])] }),
-    delete: (slot) => invoke("gmk67:command", { args: ["profile-library-delete", slot] }),
   },
   keymap: {
     presetList: () => invoke("gmk67:command", { args: ["keymap-preset-list"] }),
@@ -44,12 +34,6 @@ const api: GMK67API = {
     create: (options) => invoke("gmk67:keymap:create", options),
     apply: (slot, unsafeKeymapWrites = false) => invoke("gmk67:command", { args: ["keymap-library-apply", slot, ...(unsafeKeymapWrites ? ["--unsafe-keymap-write"] : [])] }),
     delete: (slot) => invoke("gmk67:command", { args: ["keymap-library-delete", slot] }),
-  },
-  macros: {
-    list: () => invoke("gmk67:json", { args: ["macro-library-list", "--json"] }),
-    show: (slot) => invoke("gmk67:json", { args: ["macro-library-show", slot, "--json"] }),
-    create: (options) => invoke("gmk67:macros:create", options),
-    delete: (slot) => invoke("gmk67:command", { args: ["macro-library-delete", slot] }),
   },
   files: {
     openFile: (filters) => invoke("gmk67:files:open", { filters }),
