@@ -417,24 +417,102 @@ export function App(): JSX.Element {
           </section>
         );
       case "developer":
-        return (
-          <section className="workArea">
-            <div className="panel">
-              <div className="panelHeader">
-                <div>
-                  <h2>Developer</h2>
-                  <p>Raw command bridge</p>
+        {
+          const doctorActions: Array<{ label: string; description: string; action: () => Promise<CommandResult> }> = [
+            { label: "Doctor", description: "Read-only resource, protocol, and USB checks.", action: () => window.gmk67.device.doctor(false) },
+            { label: "Doctor + HID open", description: "Also verifies macOS can open the configuration interface.", action: () => window.gmk67.device.doctor(true) },
+            { label: "Readiness", description: "Concise readiness report without opening HID.", action: () => window.gmk67.developer.run(["readiness"]) },
+            { label: "Readiness + open", description: "Concise readiness report with HID open check.", action: () => window.gmk67.developer.run(["readiness", "--open-check"]) },
+            { label: "Diagnostics", description: "Full read-only diagnostics report.", action: () => window.gmk67.device.diagnostics() },
+            { label: "Support bundle", description: "Writes readiness, diagnostics, protocol, and layout reports.", action: () => window.gmk67.device.supportBundle() },
+          ];
+          const permissionActions: Array<{ label: string; description: string; action: () => Promise<CommandResult> }> = [
+            { label: "Permission status", description: "Check Input Monitoring without opening HID.", action: () => window.gmk67.device.permissionStatus() },
+            { label: "Request permission", description: "Ask macOS for Input Monitoring permission.", action: () => window.gmk67.device.permissionRequest() },
+          ];
+          const readOnlyTools: Array<{ label: string; description: string; args: string[] }> = [
+            { label: "Scan HID", description: "List all HID interfaces for the keyboard VID/PID.", args: ["scan"] },
+            { label: "List config interface", description: "List likely vendor configuration interfaces.", args: ["list"] },
+            { label: "Dump layout", description: "Print vendor keyboard layout resource details.", args: ["dump-layout"] },
+            { label: "Self-test", description: "Run offline parser and encoder checks.", args: ["self-test"] },
+            { label: "Protocol candidates", description: "Print proven and candidate command families.", args: ["protocol-candidates"] },
+            { label: "Windows features", description: "Print extracted Windows feature inventory.", args: ["windows-features"] },
+            { label: "Validation plan", description: "Print physical validation checklist.", args: ["validation-plan"] },
+          ];
+
+          return (
+            <section className="workArea">
+              <div className="panel">
+                <div className="panelHeader">
+                  <div>
+                    <h2>Doctor</h2>
+                    <p>Read-only diagnostics and support collection</p>
+                  </div>
+                  <Bug size={18} />
                 </div>
-                <Bug size={18} />
+                <div className="developerGrid">
+                  {doctorActions.map((item) => (
+                    <button key={item.label} className="developerAction" onClick={() => run(item.action)}>
+                      <strong>{item.label}</strong>
+                      <span>{item.description}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <textarea value={developerCommand} onChange={(event) => setDeveloperCommand(event.target.value)} />
-              <button onClick={() => run(() => window.gmk67.developer.run(splitSpecs(developerCommand)))}>
-                <Play size={16} />
-                Run
-              </button>
-            </div>
-          </section>
-        );
+
+              <div className="panel">
+                <div className="panelHeader">
+                  <div>
+                    <h2>Permissions</h2>
+                    <p>macOS Input Monitoring checks</p>
+                  </div>
+                </div>
+                <div className="developerGrid compact">
+                  {permissionActions.map((item) => (
+                    <button key={item.label} className="developerAction" onClick={() => run(item.action)}>
+                      <strong>{item.label}</strong>
+                      <span>{item.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panelHeader">
+                  <div>
+                    <h2>Read-only Tools</h2>
+                    <p>Protocol, layout, and validation helpers</p>
+                  </div>
+                </div>
+                <div className="developerGrid">
+                  {readOnlyTools.map((item) => (
+                    <button key={item.label} className="developerAction" onClick={() => run(() => window.gmk67.developer.run(item.args))}>
+                      <strong>{item.label}</strong>
+                      <span>{item.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panelHeader">
+                  <div>
+                    <h2>Raw Command</h2>
+                    <p>Advanced command bridge</p>
+                  </div>
+                  <Play size={18} />
+                </div>
+                <div className="developerCommandGrid">
+                  <textarea value={developerCommand} onChange={(event) => setDeveloperCommand(event.target.value)} />
+                  <button className="primaryButton" onClick={() => run(() => window.gmk67.developer.run(splitSpecs(developerCommand)))}>
+                    <Play size={16} />
+                    Run
+                  </button>
+                </div>
+              </div>
+            </section>
+          );
+        }
     }
   }, [page, selectedKey, fillColor, mapSpecs, effectName, effectColor, presetName, themeLayout, themeName, keymaps, keymapForm, developerCommand, canWrite, readiness, unsafeKeymapWrites, selectedKeymapSlot, keymapLayer, fnMode, rgbTab, targetKey, fnLayerRemaps, activeKeymapMap, activeKeymapRemaps]);
 

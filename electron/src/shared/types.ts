@@ -97,6 +97,7 @@ export interface GMK67API {
     readiness(openCheck?: boolean): Promise<ReadinessReport>;
     doctor(openCheck?: boolean): Promise<CommandResult>;
     diagnostics(outputPath?: string): Promise<CommandResult>;
+    supportBundle(directoryPath?: string): Promise<CommandResult>;
     permissionStatus(): Promise<CommandResult>;
     permissionRequest(): Promise<CommandResult>;
   };

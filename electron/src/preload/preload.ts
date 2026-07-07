@@ -8,6 +8,7 @@ const api: GMK67API = {
     readiness: (openCheck = true) => invoke("gmk67:device:readiness", { openCheck }),
     doctor: (openCheck = false) => invoke("gmk67:command", { args: openCheck ? ["doctor", "--open-check"] : ["doctor"] }),
     diagnostics: (outputPath) => invoke("gmk67:command", { args: outputPath ? ["diagnostics", outputPath] : ["diagnostics"] }),
+    supportBundle: (directoryPath) => invoke("gmk67:command", { args: directoryPath ? ["support-bundle", directoryPath] : ["support-bundle"] }),
     permissionStatus: () => invoke("gmk67:command", { args: ["permission-status"] }),
     permissionRequest: () => invoke("gmk67:command", { args: ["permission-request"] }),
   },
